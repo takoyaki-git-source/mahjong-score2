@@ -8,17 +8,26 @@
 
 ## スタック
 
-- **フロントエンド**: Next.js (App Router)
+- **フロントエンド**: Next.js 16 (App Router, Turbopack, TypeScript, Tailwind CSS v4, `src/`ディレクトリ構成)
 - **DB / Auth**: Supabase (Postgres)
 - **デプロイ**: Vercel (GitHubリポジトリ連携で自動デプロイ)
 - **リポジトリ**: https://github.com/takoyaki-git-source/mahjong-score2
+
+⚠️ **Next.js 16は学習データにある情報から破壊的変更が多い**(例: `middleware.ts`→`proxy.ts`へ改名、`LayoutProps`等のルート型は`next dev`/`next build`実行時に自動生成される等)。コードを書く前に`node_modules/next/dist/docs/`配下の同梱ドキュメントを確認すること。
+
+### 開発環境メモ
+
+- Node.jsは`nvm`経由でv24系を使用(`agent-browser`がNode24+必須のため、v22から切り替え)。`nvm alias default 24`済み
+- `agent-browser`(nextjs:next-dev-loopスキルが使うブラウザ自動操作CLI)導入済みだが、**このMacのOS(Darwin 21.6.0 = macOS Monterey 12.x)が古く、Chrome for Testing最新版が起動できない**(VideoToolboxのシンボル不足でクラッシュ)。ブラウザ経由のランタイム検証は現状不可。`/_next/mcp`(`get_compilation_issues`/`get_routes`)と`npm run build`/`curl`での確認で代替する
+- npmのグローバルインストールで`EACCES`(`/usr/local/lib/node_modules`の所有者がroot)が出ることがある。`sudo chown -R 501:20 "/Users/sanae/.npm"`等の対応が必要な場合、ターミナルアプリから実行してもらう(この実行環境の`!`実行はパスワード入力不可)
 
 ## アクセスモデル
 
 - **書き込み(半荘結果の入力・編集)**: 自分(オーナー)のみ。Supabase Authでログインした本人だけが可能。
   - オーナーアカウント作成済み: `takoyaki0204@gmail.com`(Supabaseダッシュボードから作成、`role: authenticated`)。Next.js側では`supabase.auth.signInWithPassword({ email, password })`でログインする想定
+  - 入力・編集系のページは`/admin`配下に置く方針。`src/proxy.ts`(旧middleware)で`/admin`配下のみ未ログイン時に`/admin/login`へリダイレクトする(それ以外の全ページは未ログインでも閲覧可能)
 - **閲覧(成績・分析画面)**: 誰でも閲覧可能。Vercelにデプロイして友人にもURLを共有する想定。
-- → RLSポリシーは「SELECT: 誰でも許可」「INSERT/UPDATE/DELETE: authenticatedロールのみ許可」で設計する。
+- → RLSポリシーは「SELECT: 誰でも許可」「INSERT/UPDATE/DELETE: authenticatedロールのみ許可」で設計する(設定済み)。
 
 ## Supabaseプロジェクト
 
@@ -134,7 +143,8 @@
 1. ローカルで実装 → `git commit`
 2. リモートへの`git push`は毎回ユーザーに確認してから行う
 3. Vercel側でGitHub連携の自動デプロイを設定(未設定なら要セットアップ)
-4. 環境変数: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`(publishable key)をVercel/`.env.local`に設定。secret系のキーはコミットしない
+4. 環境変数: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`(publishable key、`sb_publishable_...`形式)を`.env.local`(gitignore済み)とVercelに設定。`.env.local.example`に空の雛形あり。secret系のキーはコミットしない
+5. Supabaseクライアントは`src/lib/supabase/{client,server,proxy}.ts`に用意済み(`@supabase/ssr`公式パターン)。Server ComponentsやRoute Handlersでは`server.ts`の`createClient()`、Client Componentsでは`client.ts`のものを使う
 
 ## 現在のTODO
 
@@ -145,9 +155,20 @@
 - [x] テスト用の半荘データ(`20260509_01`)を削除
 - [x] Supabase Authでオーナー用アカウントを1つ作成(`takoyaki0204@gmail.com`)
 - [x] 直近の未取り込みデータを確認(2026-08-10分、10半荘。ポイントのみ形式、ユーザーが後で入力予定)
+- [x] Next.jsプロジェクトの初期セットアップ(App Router, TypeScript, Tailwind, `@supabase/ssr`クライアント3種、`/admin`保護用proxy.ts)
 - [ ] 集計期間指定に対応した関数/クエリの設計
-- [ ] Next.jsプロジェクトの初期セットアップ
+- [ ] `/admin/login`ページ(ログインフォーム)
 - [ ] 半荘結果の入力画面(`submit_game` RPCを呼ぶ)
 - [ ] スプレッドシートのコピペインポート機能
 - [ ] 成績分析・可視化画面(既存ビュー群を活用)
 - [ ] Vercelデプロイ設定
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
