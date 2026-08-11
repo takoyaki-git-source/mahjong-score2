@@ -27,11 +27,46 @@
 | テーブル | 役割 | 備考 |
 |---|---|---|
 | `players` | 対局者マスタ | `player_id` PK, `name` unique |
-| `mahjong_rules` | ルール設定(ウマ・オカ・トビ賞罰など) | `base_score`(デフォルト30000), `oka`, `uma_1`〜`uma_4`, `tobi_penalty`, `tobi_reward` |
-| `games` | 半荘(1ゲーム) | `game_id` は text PK。`rule_id` で `mahjong_rules` を参照。`tobi_by_player_id` / `tobi_target_player_id` でトビの加害/被害を記録 |
-| `results` | 半荘ごとの各プレイヤーの結果 | `rank`, `raw_score`(素点), `final_score`(ウマオカ後の最終スコア), `seat_order`(1〜4の制約あり) |
+| `mahjong_rules` | ルール設定(ウマ・オカ・トビ賞罰など) | `base_score`(デフォルト30000), `oka`, `uma_1`〜`uma_4`, `tobi_penalty`, `tobi_reward`。**まだ1行も無い** |
+| `games` | 半荘(1ゲーム) | `game_id` は text PK、`YYYYMMDD_連番`形式(例: `20260811_01`)。`rule_id` で `mahjong_rules` を参照。`tobi_by_player_id` / `tobi_target_player_id` でトビの加害/被害を記録 |
+| `results` | 半荘ごとの各プレイヤーの結果 | `rank`, `raw_score`(素点), `final_score`(ウマオカ後の最終スコア、1000点単位), `seat_order`(1〜4の制約あり) |
 | `yakuman_events` | 役満記録 | `yakuman_type`, `player_id`(和了者), `target_player_id`(放銃者など、nullable) |
 | `tmp_results` | インポート用の一時テーブル(FK無し) | **削除予定**。過去データはGoogleスプレッドシートからのコピペインポート機能で取り込み直す |
+
+### 既存の関数(書き込みロジック、構築済み)
+
+`information_schema`/`pg_proc`調査で判明。半荘入力のメインロジックはほぼ完成している。
+
+- **`generate_game_id(p_date date) → text`**: その日の`games`の件数を見て`YYYYMMDD_連番`形式のgame_idを発行
+- **`submit_game(p_played_at, p_player1..4, p_score1..4, p_seat1..4, p_tobi_target, p_tobi_by) → text`**: 半荘結果をまとめて登録するRPC。
+  - `mahjong_rules`から`rule_id = 1`のルールを固定で参照(⚠️ まだルール行が無いので現状は失敗する)
+  - `generate_game_id`でgame_id発行 → `games`にINSERT
+  - 素点(`raw_score`)の降順・同点は`seat_order`昇順で着順(`rank`)を自動算出
+  - `final_score = (raw_score - base_score) / 1000 + ウマ(+1位はオカも) + トビ賞罰` を算出して`results`にINSERT
+  - フロントは基本この関数を呼ぶだけで半荘登録が完結する設計
+
+### 既存のビュー(分析ロジック、構築済み)
+
+同じ調査で18個のビューが判明。指標リストのほとんどが既にSQLで実装済み。
+
+| ビュー | 内容 |
+|---|---|
+| `player_base_stats` | 半荘数・総得点・平均/最高/最低得点・順位別回数と率・連対率・トビ回数/率 |
+| `player_daily_stats` / `player_daily_summary` | 参加日数・日別最高/最低得点・プラス/マイナス日数と率 |
+| `player_top_streak` / `player_last_streak` / `player_no_top_streak` / `player_no_last_streak` | 連続トップ/ラス/ノートップ/ノーラス数(最大値) |
+| `player_top_streak_blocks` / `_distribution` / `_distribution_rate`(last版も同様) | 連続記録の全ブロックと分布 |
+| `matchup_base` / `matchup_stats` | 対戦相手別の平均着順・トップ率・ラス率 |
+| `player_yakuman_stats` | 役満率 |
+| `player_stats_all` / `player_stats_full` | 上記の統合ビュー |
+
+⚠️ **既知の課題**:
+- 全ビューが**全期間集計固定**で、「集計期間指定」の要件に未対応。期間指定に対応するには関数化(引数で期間を受け取る)かアプリ側フィルタが必要
+
+✅ **対応済み**:
+- `player_base_stats`のトビ判定(`final_score <= -50`の閾値ベース)は意図的な設計と確認。`tobi_by_player_id`は`submit_game`呼び出し時の任意引数で、入力し忘れるとNULLのままになる。閾値ベースは常に入る`raw_score`から自動計算されるため入力漏れに強く、このままでよい
+- 全18ビューに`security_invoker = true`を設定し`SECURITY DEFINER`警告を解消
+- `generate_game_id` / `submit_game`に`search_path`を固定し警告を解消
+- Security Advisorの警告は0件になった
 
 ## 過去データの取り込み
 
@@ -86,12 +121,14 @@
 
 ## 現在のTODO
 
+- [x] RLSの有効化とポリシー設定(read: public, write: authenticated)
 - [ ] `tmp_results` テーブルの削除
-- [ ] RLSの有効化とポリシー設定(read: public, write: authenticated)
 - [ ] Supabase Authでオーナー用アカウントを1つ作成
-- [ ] `mahjong_rules` に自分たちのグループのルール(ウマ・オカ等)を1行登録
+- [x] ビューのSECURITY DEFINER/関数のsearch_path警告への対応
+- [ ] `mahjong_rules` に自分たちのグループのルール(ウマ・オカ等)を1行登録(`submit_game`が`rule_id=1`固定なので必須)
+- [ ] 集計期間指定に対応した関数/クエリの設計
 - [ ] Next.jsプロジェクトの初期セットアップ
-- [ ] 半荘結果の入力画面
+- [ ] 半荘結果の入力画面(`submit_game` RPCを呼ぶ)
 - [ ] スプレッドシートのコピペインポート機能
-- [ ] 成績分析・可視化画面
+- [ ] 成績分析・可視化画面(既存ビュー群を活用)
 - [ ] Vercelデプロイ設定
