@@ -1,69 +1,86 @@
-import Image from "next/image";
+import Link from 'next/link'
+import { createClient } from '@/lib/supabase/server'
+import { resolvePeriod, type PeriodParams } from '@/lib/period'
+import type { PlayerStats } from '@/lib/types'
+import PeriodSelector from '@/components/PeriodSelector'
 
-export default function Home() {
+function pct(v: number | null) {
+  return v == null ? '-' : `${(v * 100).toFixed(1)}%`
+}
+
+export default async function Home({ searchParams }: { searchParams: Promise<PeriodParams> }) {
+  const sp = await searchParams
+  const { start, end, label } = resolvePeriod(sp)
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .rpc('player_stats_for_period', { p_start: start, p_end: end })
+    .order('total_score', { ascending: false })
+  const stats = (data ?? []) as PlayerStats[]
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="mx-auto max-w-4xl px-4 py-8">
+      <h1 className="mb-1 text-xl font-semibold">成績一覧</h1>
+      <p className="mb-4 text-sm text-black/60 dark:text-white/60">
+        {label}
+        {start && end && ` (${start} 〜 ${end})`}
+      </p>
+
+      <PeriodSelector basePath="/" current={sp} />
+
+      {error && (
+        <p className="text-sm text-red-600 dark:text-red-400">取得に失敗しました: {error.message}</p>
+      )}
+
+      {!error && stats.length === 0 && (
+        <p className="text-sm text-black/50 dark:text-white/50">この期間の対局データはありません。</p>
+      )}
+
+      {!error && stats.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] text-sm">
+            <thead>
+              <tr className="border-b border-black/10 text-left dark:border-white/15">
+                <th className="py-2 pr-3">#</th>
+                <th className="py-2 pr-3">名前</th>
+                <th className="py-2 pr-3 text-right">半荘数</th>
+                <th className="py-2 pr-3 text-right">総pt</th>
+                <th className="py-2 pr-3 text-right">平均pt</th>
+                <th className="py-2 pr-3 text-right">平均着順</th>
+                <th className="py-2 pr-3 text-right">1位率</th>
+                <th className="py-2 pr-3 text-right">連対率</th>
+                <th className="py-2 pr-3 text-right">トビ率</th>
+                <th className="py-2 pr-3 text-right">プラス日数率</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stats.map((s, i) => (
+                <tr key={s.player_id} className="border-b border-black/5 dark:border-white/10">
+                  <td className="py-2 pr-3">{i + 1}</td>
+                  <td className="py-2 pr-3">
+                    <Link href={`/players/${s.player_id}`} className="underline">
+                      {s.name}
+                    </Link>
+                  </td>
+                  <td className="py-2 pr-3 text-right">{s.games}</td>
+                  <td
+                    className={`py-2 pr-3 text-right ${s.total_score < 0 ? 'text-red-600 dark:text-red-400' : ''}`}
+                  >
+                    {s.total_score > 0 ? '+' : ''}
+                    {s.total_score}
+                  </td>
+                  <td className="py-2 pr-3 text-right">{s.avg_score}</td>
+                  <td className="py-2 pr-3 text-right">{s.avg_rank}</td>
+                  <td className="py-2 pr-3 text-right">{pct(s.first_rate)}</td>
+                  <td className="py-2 pr-3 text-right">{pct(s.rentai_rate)}</td>
+                  <td className="py-2 pr-3 text-right">{pct(s.tobi_rate)}</td>
+                  <td className="py-2 pr-3 text-right">{pct(s.plus_rate)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+      )}
+    </main>
+  )
 }

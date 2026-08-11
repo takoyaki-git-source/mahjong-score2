@@ -4,7 +4,7 @@
 
 **2016年11月〜2026年4月の実データ(857半荘分)が既にSupabaseに入っている。** ゼロからの構築ではなく、既存データ・既存ロジックの上にフロントエンドを構築するプロジェクト。
 
-分析ロジック(集計・ストリーク計算など)はSupabaseのビューとして実装する方針を継続する。ほぼ全ての指標が全期間に対するSQL集計・ウィンドウ関数で完結する内容であり、フロントは`select`するだけで済むため。集計期間指定だけは関数化(引数で期間を受け取るRPC)が必要になる見込み。
+分析ロジック(集計・ストリーク計算など)はSupabaseの関数/ビューとして実装する方針。ほぼ全ての指標がSQL集計・ウィンドウ関数で完結する内容であり、フロントは`rpc`/`select`するだけで済むため。集計期間指定は`player_stats_for_period`等のパラメータ化関数として実装済み(下記参照)。
 
 ## スタック
 
@@ -26,11 +26,15 @@
 - **書き込み(半荘結果の入力・編集)**: 自分(オーナー)のみ。Supabase Authでログインした本人だけが可能。
   - オーナーアカウント作成済み: `takoyaki0204@gmail.com`(Supabaseダッシュボードから作成、`role: authenticated`)。Next.js側では`supabase.auth.signInWithPassword({ email, password })`でログインする想定
   - 入力・編集系のページは`/admin`配下に置く方針。`src/proxy.ts`(旧middleware)で`/admin`配下のみ未ログイン時に`/admin/login`へリダイレクトする(それ以外の全ページは未ログインでも閲覧可能)
-- **閲覧(成績・分析画面)**: 誰でも閲覧可能。Vercelにデプロイして友人にもURLを共有する想定。
+- **閲覧(成績・分析画面)**: 誰でも閲覧可能。Vercelにデプロイして友人にもURLを共有する想定。トップページ(`/`)が成績一覧、`/players/[id]`が個人詳細
 - → RLSポリシーは「SELECT: 誰でも許可」「INSERT/UPDATE/DELETE: authenticatedロールのみ許可」で設計する(設定済み)。
 
 ### 実装済みページ
 
+- `src/app/page.tsx`(トップページ、`/`): 成績一覧。`PeriodSelector`で期間指定(全期間/直近1年/直近3ヶ月/今年/カスタム)し、`player_stats_for_period` RPCの結果を総ポイント順のテーブルで表示。名前から`/players/[id]`にリンク
+- `src/app/players/[id]/page.tsx`: プレイヤー個人の詳細ページ。基本集計・連続記録・日別集計・役満・対戦相手別成績(`matchup_stats_for_period`)を表示。同じ`PeriodSelector`で期間指定可能
+- `src/components/PeriodSelector.tsx` / `src/lib/period.ts`: 期間指定UI(共通コンポーネント)。プリセットはリンク、カスタム期間は`<input type="date">`を使ったGETフォーム(JS不要)。`globals.css`に`color-scheme: light`/`dark`を設定していないとダークモード時にブラウザ標準のカレンダーアイコンが背景に同化して見えなくなる不具合があったため設定済み
+- `src/lib/types.ts`: Supabase未生成型(Database型)の代わりに、RPCの戻り値を手動で型定義(`PlayerStats`/`MatchupStats`/`PlayerYakumanStats`)。`supabase-js`の`.returns<T>()`はDatabase型generic無しだと型エラーになるため、`await`後に`as T[]`でキャストする方式を採用
 - `src/app/admin/login/page.tsx`: ログインフォーム(Client Component、`supabase.auth.signInWithPassword`)
 - `src/app/admin/page.tsx`: 半荘入力画面(Server Componentで`players`/`mahjong_rules`/`player_recent_year_games`/`player_base_stats`を取得し`GameForm`に渡す)。プレイヤーの並び順は「直近1年の参加数→累計参加数→五十音順(`Intl.Collator('ja')`による近似。読み仮名列が無いため完全な五十音順ではない)」
 - `src/app/admin/GameForm.tsx`: 入力フォーム本体(Client Component)。「素点(自動計算)」/「ポイント(計算済み)」のモード切り替え、対局日、**適用ルール選択**、4人分のプレイヤー選択と点数(またはポイント)、トビ加害(任意、1人まで)を入力。素点モードは`submit_game`、ポイントモードは`submit_game_points`を呼ぶ。素点モードのみ入力が揃うと`compute_game_results`をデバウンス呼び出しして登録前にプレビュー表示。合計点数チェック(素点は100,000、ポイントは0からのズレを警告)。実機で動作確認済み
@@ -94,8 +98,18 @@
 | `player_stats_all` / `player_stats_full` | 上記の統合ビュー |
 | `player_recent_year_games` | 直近1年の参加半荘数(新規追加、`/admin`のプレイヤー並び替え用) |
 
+### 期間指定対応の関数(新規追加)
+
+上記ビューは全期間集計固定なので、`p_start`/`p_end`(どちらもNULL可、NULL/NULLで全期間)を受け取るSQL関数を別途追加した。フロントの成績一覧・個人詳細ページはこちらを使う。
+
+- **`player_stats_for_period(p_start, p_end)`**: `player_stats_full`ビュー相当を期間指定対応にしたもの。基本集計・着順系・日別集計系・連続記録系を全部含む
+- **`matchup_stats_for_period(p_start, p_end)`**: `matchup_stats`ビュー相当
+- **`player_yakuman_stats_for_period(p_start, p_end)`**: `player_yakuman_stats`ビュー相当
+
+全期間(NULL/NULL)で呼んだ結果が既存の全期間ビューと一致することを確認済み(トップ/ラス経験が無いプレイヤーの連続記録が`NULL`ではなく`0`になる点のみ意図的な差分)。
+
 ⚠️ **既知の課題**:
-- 全ビューが**全期間集計固定**で、「集計期間指定」の要件に未対応。期間指定に対応するには関数化(引数で期間を受け取る)かアプリ側フィルタが必要
+- 上記3関数で「集計期間指定」の主要な要件はカバーしたが、連続記録の分布(`_distribution`系)や`player_stats_all`相当はまだ期間指定版を作っていない(必要になったら追加)
 
 ✅ **対応済み**:
 - トビには「飛んだ側」と「飛ばした側」があり、判定方法が異なる。
@@ -181,9 +195,9 @@
 - [x] 設定画面でルールの追加・編集を独立してできるように(`RuleManager`/`RuleForm`)
 - [x] 登録前のポイントプレビュー(`compute_game_results`を切り出してRPCプレビューに利用)
 - [x] `/admin`のプレイヤー選択プルダウンを直近1年参加数→累計参加数→五十音順(近似)でソート
-- [ ] 集計期間指定に対応した関数/クエリの設計
+- [x] 集計期間指定に対応した関数/クエリの設計(`player_stats_for_period` / `matchup_stats_for_period` / `player_yakuman_stats_for_period`)
+- [x] 成績分析・可視化画面(トップページ=成績一覧、`/players/[id]`=個人詳細。期間指定UI付き)
 - [ ] スプレッドシートのコピペインポート機能
-- [ ] 成績分析・可視化画面(既存ビュー群を活用)
 - [ ] Vercelデプロイ設定
 
 <!-- BEGIN:nextjs-agent-rules -->
