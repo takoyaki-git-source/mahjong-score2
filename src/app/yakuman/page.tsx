@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { dateOnly } from '@/lib/format'
+import SiteHeader from '@/components/SiteHeader'
 
 type YakumanRow = {
   event_id: number
@@ -27,60 +28,61 @@ export default async function YakumanPage() {
     .sort((a, b) => (b.game?.played_at ?? '').localeCompare(a.game?.played_at ?? ''))
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-8">
-      <Link href="/" className="mb-4 inline-block text-sm underline">
-        ← 成績一覧へ戻る
-      </Link>
-      <h1 className="mb-4 text-xl font-semibold">役満記録</h1>
+    <>
+      <SiteHeader active="yakuman" />
+      <main className="mx-auto w-full max-w-3xl px-4 py-8">
+        <h1 className="mb-1 font-display text-2xl font-bold">役満記録</h1>
+        <p className="mb-8 text-sm text-foreground-soft">役満が出るたびに、ここに記録される。全{rows.length}件。</p>
 
-      {error && (
-        <p className="text-sm text-red-600 dark:text-red-400">取得に失敗しました: {error.message}</p>
-      )}
+        {error && <p className="text-sm text-accent">取得に失敗しました: {error.message}</p>}
 
-      {!error && rows.length === 0 && (
-        <p className="text-sm text-black/50 dark:text-white/50">まだ役満の記録はありません。</p>
-      )}
+        {!error && rows.length === 0 && (
+          <p className="text-sm text-foreground-soft">まだ役満の記録はありません。</p>
+        )}
 
-      {!error && rows.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] text-sm">
-            <thead>
-              <tr className="border-b border-black/10 text-left dark:border-white/15">
-                <th className="py-2 pr-3">日付</th>
-                <th className="py-2 pr-3">役満</th>
-                <th className="py-2 pr-3">和了者</th>
-                <th className="py-2 pr-3">放銃者</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.event_id} className="border-b border-black/5 dark:border-white/10">
-                  <td className="py-2 pr-3">{dateOnly(r.game?.played_at)}</td>
-                  <td className="py-2 pr-3">{r.yakuman_type}</td>
-                  <td className="py-2 pr-3">
+        {!error && rows.length > 0 && (
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {rows.map((r) => (
+              <li
+                key={r.event_id}
+                className="rounded-xl border border-line border-l-[3px] border-l-gold bg-surface p-4"
+              >
+                <div className="min-w-0">
+                  <p className="font-display text-lg font-bold leading-snug">{r.yakuman_type}</p>
+                  <p className="mt-1 text-sm text-foreground-soft">{dateOnly(r.game?.played_at)}</p>
+                  <p className="mt-2 text-sm">
                     {r.winner ? (
-                      <Link href={`/players/${r.winner.player_id}`} className="underline">
+                      <Link href={`/players/${r.winner.player_id}`} className="font-medium hover:text-accent hover:underline">
                         {r.winner.name}
                       </Link>
                     ) : (
                       '-'
                     )}
-                  </td>
-                  <td className="py-2 pr-3">
-                    {r.target ? (
-                      <Link href={`/players/${r.target.player_id}`} className="underline">
-                        {r.target.name}
-                      </Link>
-                    ) : (
-                      'ツモ'
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </main>
+                    <span className="text-foreground-soft">
+                      {' '}
+                      が和了、
+                      {r.target ? (
+                        <>
+                          {' '}
+                          <Link
+                            href={`/players/${r.target.player_id}`}
+                            className="font-medium text-foreground hover:text-accent hover:underline"
+                          >
+                            {r.target.name}
+                          </Link>{' '}
+                          の放銃
+                        </>
+                      ) : (
+                        ' ツモ和了'
+                      )}
+                    </span>
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </main>
+    </>
   )
 }

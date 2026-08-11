@@ -46,7 +46,7 @@ export default function RuleManager({ rules }: { rules: Rule[] }) {
     <div className="space-y-4">
       <ul className="space-y-2">
         {rules.map((rule) => (
-          <li key={rule.rule_id} className="rounded-md border border-black/10 p-3 dark:border-white/15">
+          <li key={rule.rule_id} className="rounded-lg border border-line bg-surface p-3">
             {editingId === rule.rule_id ? (
               <RuleForm
                 ruleId={rule.rule_id}
@@ -58,7 +58,7 @@ export default function RuleManager({ rules }: { rules: Rule[] }) {
               <div className="flex items-center justify-between">
                 <div className="text-sm">
                   <p className="font-medium">{rule.rule_name}</p>
-                  <p className="text-black/60 dark:text-white/60">
+                  <p className="font-mono text-foreground-soft">
                     開始点{rule.base_score} / オカ{rule.oka} / ウマ {rule.uma_1}・{rule.uma_2}・
                     {rule.uma_3}・{rule.uma_4} / トビ賞{rule.tobi_reward}・罰{rule.tobi_penalty}
                   </p>
@@ -66,7 +66,7 @@ export default function RuleManager({ rules }: { rules: Rule[] }) {
                 <button
                   type="button"
                   onClick={() => setEditingId(rule.rule_id)}
-                  className="shrink-0 text-sm underline"
+                  className="shrink-0 text-sm text-foreground-soft hover:text-accent"
                 >
                   編集
                 </button>
@@ -77,14 +77,14 @@ export default function RuleManager({ rules }: { rules: Rule[] }) {
       </ul>
 
       {adding ? (
-        <div className="rounded-md border border-black/10 p-3 dark:border-white/15">
+        <div className="rounded-lg border border-line bg-surface p-3">
           <RuleForm initial={emptyRuleValues} onSaved={handleSaved} onCancel={() => setAdding(false)} />
         </div>
       ) : (
         <button
           type="button"
           onClick={() => setAdding(true)}
-          className="rounded-md border border-black/15 px-4 py-2 text-sm dark:border-white/20"
+          className="rounded-md border border-line px-4 py-2 text-sm hover:border-accent hover:text-accent"
         >
           + 新しいルールを追加
         </button>

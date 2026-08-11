@@ -190,7 +190,7 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
   }
 
   const inputClass =
-    'w-full rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/40'
+    'w-full rounded-md border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent'
 
   function playerName(id: number) {
     return players.find((p) => p.player_id === id)?.name ?? `#${id}`
@@ -200,14 +200,12 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
     <form onSubmit={handleSubmit} className="max-w-xl space-y-6">
       <div>
         <span className="mb-1 block text-sm font-medium">入力モード</span>
-        <div className="inline-flex rounded-md border border-black/15 p-0.5 dark:border-white/20">
+        <div className="inline-flex rounded-full border border-line bg-surface p-1">
           <button
             type="button"
             onClick={() => switchMode('raw')}
-            className={`rounded px-3 py-1.5 text-sm ${
-              mode === 'raw'
-                ? 'bg-foreground text-background'
-                : 'text-black/60 dark:text-white/60'
+            className={`rounded-full px-3.5 py-1.5 text-sm transition-colors ${
+              mode === 'raw' ? 'bg-accent text-background' : 'text-foreground-soft hover:text-foreground'
             }`}
           >
             素点(自動計算)
@@ -215,16 +213,14 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
           <button
             type="button"
             onClick={() => switchMode('points')}
-            className={`rounded px-3 py-1.5 text-sm ${
-              mode === 'points'
-                ? 'bg-foreground text-background'
-                : 'text-black/60 dark:text-white/60'
+            className={`rounded-full px-3.5 py-1.5 text-sm transition-colors ${
+              mode === 'points' ? 'bg-accent text-background' : 'text-foreground-soft hover:text-foreground'
             }`}
           >
             ポイント(計算済み)
           </button>
         </div>
-        <p className="mt-1 text-xs text-black/50 dark:text-white/50">
+        <p className="mt-1 text-xs text-foreground-soft">
           {mode === 'raw'
             ? '半荘終了時の素点を入力すると、ウマ・オカ・トビを自動計算します。'
             : 'すでにウマ・オカ・トビ計算済みの最終ポイントをそのまま記録します(自動計算は行いません)。'}
@@ -271,7 +267,7 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
           <div key={i} className="flex items-end gap-3">
             <div className="flex-1">
               <label className="mb-1 block text-sm font-medium">
-                {i + 1}人目{i === 0 && <span className="text-black/50 dark:text-white/50">(起家)</span>}
+                {i + 1}人目{i === 0 && <span className="text-foreground-soft">(起家)</span>}
               </label>
               <select
                 required
@@ -304,31 +300,31 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
         ))}
       </div>
 
-      <p className="text-sm text-black/60 dark:text-white/60">
+      <p className="text-sm text-foreground-soft">
         合計: {valueSum.toLocaleString()}{mode === 'raw' ? '点' : 'pt'}
         {mode === 'raw' && valueSum !== 0 && valueSum !== 100000 && (
-          <span className="text-amber-600 dark:text-amber-400"> (通常は100,000点になるはずです)</span>
+          <span className="text-gold"> (通常は100,000点になるはずです)</span>
         )}
         {mode === 'points' && valueSum !== 0 && (
-          <span className="text-amber-600 dark:text-amber-400"> (通常は合計0になるはずです)</span>
+          <span className="text-gold"> (通常は合計0になるはずです)</span>
         )}
       </p>
 
       {mode === 'raw' && rowsComplete && (
-        <div className="rounded-md border border-black/10 bg-black/[0.03] p-3 text-sm dark:border-white/10 dark:bg-white/[0.03]">
+        <div className="rounded-lg border border-line bg-surface p-3 text-sm">
           <p className="mb-2 font-medium">
-            プレビュー{previewLoading && <span className="text-black/40 dark:text-white/40">(計算中…)</span>}
+            プレビュー{previewLoading && <span className="text-foreground-soft">(計算中…)</span>}
           </p>
           {preview ? (
-            <ul className="space-y-1">
+            <ul className="space-y-1 font-mono tabular-nums">
               {[...preview]
                 .sort((a, b) => a.rank - b.rank)
                 .map((p) => (
                   <li key={p.player_id} className="flex justify-between">
-                    <span>
+                    <span className="font-sans">
                       {p.rank}位 {playerName(p.player_id)}
                     </span>
-                    <span className={p.final_score < 0 ? 'text-red-600 dark:text-red-400' : ''}>
+                    <span className={p.final_score < 0 ? 'text-accent' : 'text-accent-2'}>
                       {p.final_score > 0 ? '+' : ''}
                       {p.final_score}pt
                     </span>
@@ -336,7 +332,7 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
                 ))}
             </ul>
           ) : (
-            !previewLoading && <p className="text-black/40 dark:text-white/40">-</p>
+            !previewLoading && <p className="text-foreground-soft">-</p>
           )}
         </div>
       )}
@@ -371,9 +367,9 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
         </datalist>
         <div className="space-y-3">
           {yakumanEntries.map((entry, i) => (
-            <div key={i} className="flex items-end gap-2 rounded-md border border-black/10 p-2 dark:border-white/15">
+            <div key={i} className="flex items-end gap-2 rounded-md border border-line p-2">
               <div className="flex-1">
-                <label className="mb-1 block text-xs text-black/60 dark:text-white/60">和了者</label>
+                <label className="mb-1 block text-xs text-foreground-soft">和了者</label>
                 <select
                   value={entry.playerId}
                   onChange={(e) => updateYakumanEntry(i, { playerId: e.target.value })}
@@ -390,7 +386,7 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
                 </select>
               </div>
               <div className="flex-1">
-                <label className="mb-1 block text-xs text-black/60 dark:text-white/60">役満</label>
+                <label className="mb-1 block text-xs text-foreground-soft">役満</label>
                 <input
                   type="text"
                   list="yakuman_suggestions"
@@ -400,7 +396,7 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
                 />
               </div>
               <div className="flex-1">
-                <label className="mb-1 block text-xs text-black/60 dark:text-white/60">放銃者(任意)</label>
+                <label className="mb-1 block text-xs text-foreground-soft">放銃者(任意)</label>
                 <select
                   value={entry.targetId}
                   onChange={(e) => updateYakumanEntry(i, { targetId: e.target.value })}
@@ -423,7 +419,7 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
               <button
                 type="button"
                 onClick={() => removeYakumanEntry(i)}
-                className="shrink-0 rounded-md border border-black/15 px-2 py-2 text-xs dark:border-white/20"
+                className="shrink-0 rounded-md border border-line px-2 py-2 text-xs text-foreground-soft hover:text-foreground"
               >
                 削除
               </button>
@@ -433,23 +429,19 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
         <button
           type="button"
           onClick={addYakumanEntry}
-          className="mt-2 rounded-md border border-black/15 px-3 py-1.5 text-sm dark:border-white/20"
+          className="mt-2 rounded-md border border-line px-3 py-1.5 text-sm hover:border-accent hover:text-accent"
         >
           + 役満を追加
         </button>
       </div>
 
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-      {lastGameId && (
-        <p className="text-sm text-green-600 dark:text-green-400">
-          登録しました({lastGameId})
-        </p>
-      )}
+      {error && <p className="text-sm text-accent">{error}</p>}
+      {lastGameId && <p className="text-sm text-accent-2">登録しました({lastGameId})</p>}
 
       <button
         type="submit"
         disabled={submitting}
-        className="w-full rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background disabled:opacity-50"
+        className="w-full rounded-md bg-accent px-4 py-2 text-sm font-medium text-background disabled:opacity-50"
       >
         {submitting ? '登録中…' : '登録する'}
       </button>

@@ -10,45 +10,58 @@ const PRESETS = [
 export default function PeriodSelector({
   basePath,
   current,
+  years = [],
 }: {
   basePath: string
   current: PeriodParams
+  years?: number[]
 }) {
   const isCustom = Boolean(current.start || current.end)
   const activePeriod = isCustom ? null : (current.period ?? 'all')
 
-  const linkClass = (active: boolean) =>
-    `rounded-full border px-3 py-1 text-sm ${
-      active
-        ? 'border-foreground bg-foreground text-background'
-        : 'border-black/15 dark:border-white/20'
+  const pillClass = (active: boolean) =>
+    `rounded-full px-3.5 py-1.5 text-sm transition-colors ${
+      active ? 'bg-accent text-background' : 'text-foreground-soft hover:text-foreground'
     }`
 
   return (
-    <div className="mb-6 flex flex-wrap items-center gap-2">
-      {PRESETS.map((p) => (
-        <Link key={p.key} href={`${basePath}?period=${p.key}`} className={linkClass(activePeriod === p.key)}>
-          {p.label}
-        </Link>
-      ))}
-      <form method="get" action={basePath} className="flex items-center gap-1 text-sm">
+    <div className="mb-8 flex flex-wrap items-center gap-3">
+      <div className="inline-flex rounded-full border border-line bg-surface p-1">
+        {PRESETS.map((p) => (
+          <Link key={p.key} href={`${basePath}?period=${p.key}`} className={pillClass(activePeriod === p.key)}>
+            {p.label}
+          </Link>
+        ))}
+      </div>
+      {years.length > 0 && (
+        <div className="inline-flex flex-wrap rounded-full border border-line bg-surface p-1">
+          {years.map((y) => (
+            <Link key={y} href={`${basePath}?period=${y}`} className={pillClass(activePeriod === String(y))}>
+              {y}
+            </Link>
+          ))}
+        </div>
+      )}
+      <form method="get" action={basePath} className="flex items-center gap-1.5 text-sm">
         <input
           type="date"
           name="start"
           defaultValue={current.start ?? ''}
-          className="rounded border border-black/15 bg-transparent px-2 py-1 dark:border-white/20"
+          className="rounded-md border border-line bg-surface px-2 py-1.5 text-foreground"
         />
-        <span>〜</span>
+        <span className="text-foreground-soft">〜</span>
         <input
           type="date"
           name="end"
           defaultValue={current.end ?? ''}
-          className="rounded border border-black/15 bg-transparent px-2 py-1 dark:border-white/20"
+          className="rounded-md border border-line bg-surface px-2 py-1.5 text-foreground"
         />
         <button
           type="submit"
-          className={`rounded border px-2 py-1 ${
-            isCustom ? 'border-foreground' : 'border-black/15 dark:border-white/20'
+          className={`rounded-md border px-3 py-1.5 transition-colors ${
+            isCustom
+              ? 'border-accent text-accent'
+              : 'border-line text-foreground-soft hover:text-foreground'
           }`}
         >
           指定

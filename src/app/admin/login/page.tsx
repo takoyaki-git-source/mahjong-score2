@@ -4,6 +4,9 @@ import { useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
+const inputClass =
+  'w-full rounded-md border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent'
+
 export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
@@ -34,8 +37,9 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-svh max-w-sm flex-col justify-center px-4 py-12">
-      <h1 className="mb-6 text-xl font-semibold">ログイン</h1>
+    <main className="mx-auto flex min-h-svh w-full max-w-sm flex-col justify-center px-4 py-12">
+      <p className="mb-8 font-display text-lg font-bold">麻雀成績</p>
+      <h1 className="mb-6 font-display text-xl font-bold">ログイン</h1>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label htmlFor="email" className="mb-1 block text-sm font-medium">
@@ -48,7 +52,7 @@ export default function LoginPage() {
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/40"
+            className={inputClass}
           />
         </div>
         <div>
@@ -62,16 +66,16 @@ export default function LoginPage() {
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/40"
+            className={inputClass}
           />
         </div>
 
-        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="text-sm text-accent">{error}</p>}
 
         <button
           type="submit"
           disabled={submitting}
-          className="w-full rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background disabled:opacity-50"
+          className="w-full rounded-md bg-accent px-4 py-2 text-sm font-medium text-background disabled:opacity-50"
         >
           {submitting ? 'ログイン中…' : 'ログイン'}
         </button>

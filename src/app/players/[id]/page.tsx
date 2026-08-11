@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { resolvePeriod, type PeriodParams } from '@/lib/period'
 import { dateOnly } from '@/lib/format'
 import type { PlayerStats, MatchupStats, PlayerYakumanStats } from '@/lib/types'
+import SiteHeader from '@/components/SiteHeader'
 import PeriodSelector from '@/components/PeriodSelector'
 
 type YakumanDetail = {
@@ -25,6 +26,15 @@ function pctCount(v: number | null, count: number | null, unit: '回' | '日' = 
 function pt(v: number | null) {
   if (v == null) return '-'
   return `${v > 0 ? '+' : ''}${v}`
+}
+
+function StatCard({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-xl border border-line bg-surface p-3.5">
+      <p className="text-xs text-foreground-soft">{label}</p>
+      <p className="mt-1 font-mono text-lg font-semibold tabular-nums">{value}</p>
+    </div>
+  )
 }
 
 export default async function PlayerPage({
@@ -49,30 +59,37 @@ export default async function PlayerPage({
 
   if (!player) return notFound()
 
-  const [{ data: statsData }, { data: matchupsData }, { data: yakumanData }, { data: yakumanDetailData }] =
-    await Promise.all([
-      supabase.rpc('player_stats_for_period', { p_start: start, p_end: end }).eq('player_id', playerId),
-      supabase
-        .rpc('matchup_stats_for_period', { p_start: start, p_end: end })
-        .eq('player_a', playerId)
-        .order('games', { ascending: false }),
-      supabase.rpc('player_yakuman_stats_for_period', { p_start: start, p_end: end }).eq('player_id', playerId),
-      supabase
-        .from('yakuman_events')
-        .select(
-          `
+  const [
+    { data: statsData },
+    { data: matchupsData },
+    { data: yakumanData },
+    { data: yakumanDetailData },
+    { data: yearRows },
+  ] = await Promise.all([
+    supabase.rpc('player_stats_for_period', { p_start: start, p_end: end }).eq('player_id', playerId),
+    supabase
+      .rpc('matchup_stats_for_period', { p_start: start, p_end: end })
+      .eq('player_a', playerId)
+      .order('games', { ascending: false }),
+    supabase.rpc('player_yakuman_stats_for_period', { p_start: start, p_end: end }).eq('player_id', playerId),
+    supabase
+      .from('yakuman_events')
+      .select(
+        `
           event_id,
           yakuman_type,
           game:games!yakuman_events_game_id_fkey(played_at),
           target:players!yakuman_events_target_player_id_fkey(player_id, name)
         `
-        )
-        .eq('player_id', playerId),
-    ])
+      )
+      .eq('player_id', playerId),
+    supabase.rpc('available_years'),
+  ])
 
   const statsRows = (statsData ?? []) as PlayerStats[]
   const matchups = (matchupsData ?? []) as MatchupStats[]
   const yakumanRows = (yakumanData ?? []) as PlayerYakumanStats[]
+  const years = (yearRows ?? []).map((r: { year: number }) => r.year)
   const stats = statsRows[0]
   const yakuman = yakumanRows[0]
 
@@ -87,157 +104,135 @@ export default async function PlayerPage({
     .sort((a, b) => (b.game?.played_at ?? '').localeCompare(a.game?.played_at ?? ''))
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-8">
-      <Link href="/" className="mb-4 inline-block text-sm underline">
-        ← 成績一覧へ戻る
-      </Link>
-      <h1 className="mb-1 text-xl font-semibold">{player.name}</h1>
-      <p className="mb-4 text-sm text-black/60 dark:text-white/60">
-        {label}
-        {start && end && ` (${start} 〜 ${end})`}
-      </p>
+    <>
+      <SiteHeader />
+      <main className="mx-auto w-full max-w-4xl px-4 py-8">
+        <Link href="/" className="mb-4 inline-block text-sm text-foreground-soft hover:text-foreground">
+          ← 成績一覧へ戻る
+        </Link>
+        <h1 className="mb-1 font-display text-2xl font-bold">{player.name}</h1>
+        <p className="mb-6 text-sm text-foreground-soft">
+          {label}
+          {start && end && ` (${start} 〜 ${end})`}
+        </p>
 
-      <PeriodSelector basePath={`/players/${playerId}`} current={sp} />
+        <PeriodSelector basePath={`/players/${playerId}`} current={sp} years={years} />
 
-      {!stats ? (
-        <p className="text-sm text-black/50 dark:text-white/50">この期間の対局データはありません。</p>
-      ) : (
-        <div className="space-y-8">
-          <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {[
-              ['半荘数', stats.games],
-              ['総pt', pt(stats.total_score)],
-              ['平均pt', stats.avg_score],
-              ['平均着順', stats.avg_rank],
-              ['1位率', pctCount(stats.first_rate, stats.first_count)],
-              ['2位率', pctCount(stats.second_rate, stats.second_count)],
-              ['3位率', pctCount(stats.third_rate, stats.third_count)],
-              ['4位率', pctCount(stats.fourth_rate, stats.fourth_count)],
-              ['連対率', pctCount(stats.rentai_rate, stats.first_count + stats.second_count)],
-              ['トビ率', pctCount(stats.tobi_rate, stats.tobi_count)],
-              ['最高pt', pt(stats.max_score)],
-              ['最低pt', pt(stats.min_score)],
-              ['最終対局日', stats.last_played],
-            ].map(([label, value]) => (
-              <div
-                key={label as string}
-                className="rounded-md border border-black/10 p-3 text-sm dark:border-white/15"
-              >
-                <p className="text-black/50 dark:text-white/50">{label}</p>
-                <p className="text-lg font-medium">{value}</p>
-              </div>
-            ))}
-          </section>
-
-          <section>
-            <h2 className="mb-2 text-lg font-medium">連続記録</h2>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {[
-                ['連続トップ', stats.max_top_streak],
-                ['連続ラス', stats.max_last_streak],
-                ['連続ノートップ', stats.max_no_top_streak],
-                ['連続ノーラス', stats.max_no_last_streak],
-              ].map(([label, value]) => (
-                <div
-                  key={label as string}
-                  className="rounded-md border border-black/10 p-3 text-sm dark:border-white/15"
-                >
-                  <p className="text-black/50 dark:text-white/50">{label}</p>
-                  <p className="text-lg font-medium">{value}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section>
-            <h2 className="mb-2 text-lg font-medium">日別集計</h2>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {[
-                ['参加日数', stats.play_days],
-                ['日別最高pt', pt(stats.best_day)],
-                ['日別最低pt', pt(stats.worst_day)],
-                ['プラス日数率', pctCount(stats.plus_rate, stats.plus_days, '日')],
-              ].map(([label, value]) => (
-                <div
-                  key={label as string}
-                  className="rounded-md border border-black/10 p-3 text-sm dark:border-white/15"
-                >
-                  <p className="text-black/50 dark:text-white/50">{label}</p>
-                  <p className="text-lg font-medium">{value}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {yakuman && yakuman.yakuman_count > 0 && (
-            <section>
-              <h2 className="mb-2 text-lg font-medium">役満</h2>
-              <p className="mb-3 text-sm">
-                {yakuman.yakuman_count}回 (発生率 {pct(yakuman.yakuman_rate)})
-              </p>
-              <ul className="space-y-1 text-sm">
-                {yakumanDetails.map((y) => (
-                  <li key={y.event_id} className="flex justify-between gap-3">
-                    <span>
-                      {dateOnly(y.game?.played_at)} {y.yakuman_type}
-                    </span>
-                    <span className="text-black/50 dark:text-white/50">
-                      {y.target ? (
-                        <>
-                          放銃:{' '}
-                          <Link href={`/players/${y.target.player_id}`} className="underline">
-                            {y.target.name}
-                          </Link>
-                        </>
-                      ) : (
-                        'ツモ'
-                      )}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+        {!stats ? (
+          <p className="text-sm text-foreground-soft">この期間の対局データはありません。</p>
+        ) : (
+          <div className="space-y-10">
+            <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <StatCard label="半荘数" value={stats.games} />
+              <StatCard label="総pt" value={pt(stats.total_score)} />
+              <StatCard label="平均pt" value={stats.avg_score} />
+              <StatCard label="平均着順" value={stats.avg_rank} />
+              <StatCard label="1位率" value={pctCount(stats.first_rate, stats.first_count)} />
+              <StatCard label="2位率" value={pctCount(stats.second_rate, stats.second_count)} />
+              <StatCard label="3位率" value={pctCount(stats.third_rate, stats.third_count)} />
+              <StatCard label="4位率" value={pctCount(stats.fourth_rate, stats.fourth_count)} />
+              <StatCard
+                label="連対率"
+                value={pctCount(stats.rentai_rate, stats.first_count + stats.second_count)}
+              />
+              <StatCard label="トビ率" value={pctCount(stats.tobi_rate, stats.tobi_count)} />
+              <StatCard label="最高pt" value={pt(stats.max_score)} />
+              <StatCard label="最低pt" value={pt(stats.min_score)} />
+              <StatCard label="最終対局日" value={stats.last_played} />
             </section>
-          )}
 
-          <section>
-            <h2 className="mb-2 text-lg font-medium">対戦相手別成績</h2>
-            {matchups && matchups.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[560px] text-sm">
-                  <thead>
-                    <tr className="border-b border-black/10 text-left dark:border-white/15">
-                      <th className="py-2 pr-3">相手</th>
-                      <th className="py-2 pr-3 text-right">対局数</th>
-                      <th className="py-2 pr-3 text-right">自分の平均着順</th>
-                      <th className="py-2 pr-3 text-right">相手の平均着順</th>
-                      <th className="py-2 pr-3 text-right">自分のトップ率</th>
-                      <th className="py-2 pr-3 text-right">自分のラス率</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {matchups.map((m) => (
-                      <tr key={m.player_b} className="border-b border-black/5 dark:border-white/10">
-                        <td className="py-2 pr-3">
-                          <Link href={`/players/${m.player_b}`} className="underline">
-                            {m.name_b}
-                          </Link>
-                        </td>
-                        <td className="py-2 pr-3 text-right">{m.games}</td>
-                        <td className="py-2 pr-3 text-right">{m.avg_rank_a}</td>
-                        <td className="py-2 pr-3 text-right">{m.avg_rank_b}</td>
-                        <td className="py-2 pr-3 text-right">{pct(m.top_rate_a)}</td>
-                        <td className="py-2 pr-3 text-right">{pct(m.last_rate_a)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <section>
+              <h2 className="mb-3 font-display text-lg font-bold">連続記録</h2>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <StatCard label="連続トップ" value={stats.max_top_streak} />
+                <StatCard label="連続ラス" value={stats.max_last_streak} />
+                <StatCard label="連続ノートップ" value={stats.max_no_top_streak} />
+                <StatCard label="連続ノーラス" value={stats.max_no_last_streak} />
               </div>
-            ) : (
-              <p className="text-sm text-black/50 dark:text-white/50">データがありません。</p>
+            </section>
+
+            <section>
+              <h2 className="mb-3 font-display text-lg font-bold">日別集計</h2>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <StatCard label="参加日数" value={stats.play_days} />
+                <StatCard label="日別最高pt" value={pt(stats.best_day)} />
+                <StatCard label="日別最低pt" value={pt(stats.worst_day)} />
+                <StatCard label="プラス日数率" value={pctCount(stats.plus_rate, stats.plus_days, '日')} />
+              </div>
+            </section>
+
+            {yakuman && yakuman.yakuman_count > 0 && (
+              <section>
+                <h2 className="mb-3 font-display text-lg font-bold">役満</h2>
+                <p className="mb-3 text-sm text-foreground-soft">
+                  {yakuman.yakuman_count}回 (発生率 {pct(yakuman.yakuman_rate)})
+                </p>
+                <ul className="space-y-2">
+                  {yakumanDetails.map((y) => (
+                    <li
+                      key={y.event_id}
+                      className="flex items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+                    >
+                      <span className="font-medium">{y.yakuman_type}</span>
+                      <span className="text-foreground-soft">{dateOnly(y.game?.played_at)}</span>
+                      <span className="ml-auto text-foreground-soft">
+                        {y.target ? (
+                          <>
+                            放銃:{' '}
+                            <Link href={`/players/${y.target.player_id}`} className="text-foreground hover:text-accent hover:underline">
+                              {y.target.name}
+                            </Link>
+                          </>
+                        ) : (
+                          'ツモ'
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             )}
-          </section>
-        </div>
-      )}
-    </main>
+
+            <section>
+              <h2 className="mb-3 font-display text-lg font-bold">対戦相手別成績</h2>
+              {matchups && matchups.length > 0 ? (
+                <div className="overflow-x-auto rounded-xl border border-line bg-surface">
+                  <table className="w-full min-w-[560px] text-sm">
+                    <thead>
+                      <tr className="border-b border-line text-left text-foreground-soft">
+                        <th className="py-2.5 pr-3 pl-4">相手</th>
+                        <th className="py-2.5 pr-3 text-right">対局数</th>
+                        <th className="py-2.5 pr-3 text-right">自分の平均着順</th>
+                        <th className="py-2.5 pr-3 text-right">相手の平均着順</th>
+                        <th className="py-2.5 pr-3 text-right">自分のトップ率</th>
+                        <th className="py-2.5 pr-4 text-right">自分のラス率</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {matchups.map((m) => (
+                        <tr key={m.player_b} className="border-b border-line/70 last:border-b-0">
+                          <td className="py-2.5 pr-3 pl-4">
+                            <Link href={`/players/${m.player_b}`} className="hover:text-accent hover:underline">
+                              {m.name_b}
+                            </Link>
+                          </td>
+                          <td className="py-2.5 pr-3 text-right font-mono tabular-nums">{m.games}</td>
+                          <td className="py-2.5 pr-3 text-right font-mono tabular-nums">{m.avg_rank_a}</td>
+                          <td className="py-2.5 pr-3 text-right font-mono tabular-nums">{m.avg_rank_b}</td>
+                          <td className="py-2.5 pr-3 text-right font-mono tabular-nums">{pct(m.top_rate_a)}</td>
+                          <td className="py-2.5 pr-4 text-right font-mono tabular-nums">{pct(m.last_rate_a)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-sm text-foreground-soft">データがありません。</p>
+              )}
+            </section>
+          </div>
+        )}
+      </main>
+    </>
   )
 }

@@ -41,16 +41,13 @@ export default function PlayerManager({ players }: { players: Player[] }) {
   }
 
   const inputClass =
-    'w-full rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/40'
+    'w-full rounded-md border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent'
 
   return (
     <div className="space-y-4">
       <ul className="flex flex-wrap gap-2">
         {players.map((p) => (
-          <li
-            key={p.player_id}
-            className="rounded-full border border-black/10 px-3 py-1 text-sm dark:border-white/15"
-          >
+          <li key={p.player_id} className="rounded-full border border-line bg-surface px-3 py-1 text-sm">
             {p.name}
           </li>
         ))}
@@ -72,13 +69,13 @@ export default function PlayerManager({ players }: { players: Player[] }) {
         <button
           type="submit"
           disabled={submitting}
-          className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background disabled:opacity-50"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-background disabled:opacity-50"
         >
           {submitting ? '追加中…' : '追加'}
         </button>
       </form>
 
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p className="text-sm text-accent">{error}</p>}
     </div>
   )
 }

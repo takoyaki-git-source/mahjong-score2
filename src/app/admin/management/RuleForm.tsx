@@ -76,7 +76,7 @@ export default function RuleForm({ ruleId, initial, onSaved, onCancel }: Props) 
   }
 
   const inputClass =
-    'w-full rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/40'
+    'w-full rounded-md border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent'
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -150,13 +150,13 @@ export default function RuleForm({ ruleId, initial, onSaved, onCancel }: Props) 
         </div>
       </div>
 
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p className="text-sm text-accent">{error}</p>}
 
       <div className="flex gap-3">
         <button
           type="submit"
           disabled={submitting}
-          className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background disabled:opacity-50"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-background disabled:opacity-50"
         >
           {submitting ? '保存中…' : '保存する'}
         </button>
@@ -164,7 +164,7 @@ export default function RuleForm({ ruleId, initial, onSaved, onCancel }: Props) 
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-md border border-black/15 px-4 py-2 text-sm dark:border-white/20"
+            className="rounded-md border border-line px-4 py-2 text-sm hover:border-accent hover:text-accent"
           >
             キャンセル
           </button>

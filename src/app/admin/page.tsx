@@ -1,7 +1,6 @@
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import AdminHeader from '@/components/AdminHeader'
 import GameForm from './GameForm'
-import LogoutButton from './LogoutButton'
 
 const jaCollator = new Intl.Collator('ja')
 
@@ -33,24 +32,15 @@ export default async function AdminPage() {
   })
 
   return (
-    <main className="mx-auto max-w-xl px-4 py-8">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-xl font-semibold">半荘入力</h1>
-        <div className="flex items-center gap-4">
-          <Link href="/admin/management" className="text-sm underline">
-            管理
-          </Link>
-          <LogoutButton />
-        </div>
-      </div>
+    <>
+      <AdminHeader active="input" />
+      <main className="mx-auto w-full max-w-xl px-4 py-8">
+        <h1 className="mb-6 font-display text-xl font-bold">半荘入力</h1>
 
-      {error && (
-        <p className="text-sm text-red-600 dark:text-red-400">
-          データの取得に失敗しました: {error.message}
-        </p>
-      )}
+        {error && <p className="text-sm text-accent">データの取得に失敗しました: {error.message}</p>}
 
-      {!error && <GameForm players={sortedPlayers} rules={rules ?? []} />}
-    </main>
+        {!error && <GameForm players={sortedPlayers} rules={rules ?? []} />}
+      </main>
+    </>
   )
 }

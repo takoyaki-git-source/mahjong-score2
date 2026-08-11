@@ -19,6 +19,9 @@ export function resolvePeriod(sp: PeriodParams): ResolvedPeriod {
     start.setMonth(0, 1)
     return { start: toISODate(start), end: toISODate(end), label: '今年' }
   }
+  if (/^\d{4}$/.test(period)) {
+    return { start: `${period}-01-01`, end: `${period}-12-31`, label: `${period}年` }
+  }
 
   return { start: null, end: null, label: '全期間' }
 }

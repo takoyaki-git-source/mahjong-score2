@@ -17,7 +17,7 @@ export default function LogoutButton() {
     <button
       type="button"
       onClick={handleLogout}
-      className="text-sm text-black/60 underline hover:text-black dark:text-white/60 dark:hover:text-white"
+      className="text-sm text-foreground-soft hover:text-foreground"
     >
       ログアウト
     </button>

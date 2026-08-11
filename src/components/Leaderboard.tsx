@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import type { PlayerStats } from '@/lib/types'
+import TileBadge from './TileBadge'
 
 type ColumnKey =
   | 'name'
@@ -93,6 +94,21 @@ export default function Leaderboard({ stats }: { stats: PlayerStats[] }) {
     [stats, minGames]
   )
 
+  // 平均ptの首位を出す。ただし対局数が極端に少ないと運の影響が大きく出やすいので、
+  // その期間の参加者の半荘数の中央値の半分未満(最低5半荘)の人は対象から除外する。
+  // 除外した結果0人になる場合は元の集団にフォールバックする。
+  const champion = useMemo(() => {
+    if (visibleStats.length === 0) return null
+    const gamesSorted = [...visibleStats].map((s) => s.games).sort((a, b) => a - b)
+    const mid = Math.floor(gamesSorted.length / 2)
+    const median =
+      gamesSorted.length % 2 === 0 ? (gamesSorted[mid - 1] + gamesSorted[mid]) / 2 : gamesSorted[mid]
+    const threshold = Math.max(5, median / 2)
+    const eligible = visibleStats.filter((s) => s.games >= threshold)
+    const pool = eligible.length > 0 ? eligible : visibleStats
+    return [...pool].sort((a, b) => b.avg_score - a.avg_score)[0] ?? null
+  }, [visibleStats])
+
   const sorted = useMemo(() => {
     const copy = [...visibleStats]
     copy.sort((a, b) => {
@@ -130,15 +146,35 @@ export default function Leaderboard({ stats }: { stats: PlayerStats[] }) {
     if (!bw) return ''
     const v = valueOf(s, col.key)
     if (typeof v !== 'number') return ''
-    if (v === bw.best) return 'bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400 font-medium'
-    if (v === bw.worst) return 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400'
+    if (v === bw.best) return 'bg-accent-2/10 text-accent-2 font-semibold'
+    if (v === bw.worst) return 'bg-accent/10 text-accent'
     return ''
   }
 
   return (
     <div>
-      <div className="mb-3 flex items-center gap-2 text-sm">
-        <label htmlFor="min_games" className="text-black/60 dark:text-white/60">
+      {champion && (
+        <div className="mb-8 flex items-center gap-4 rounded-xl border border-gold/40 bg-surface px-5 py-4">
+          <TileBadge rank={1} size="lg" />
+          <div className="min-w-0">
+            <p className="text-xs tracking-wide text-foreground-soft">この期間の平均pt首位</p>
+            <Link
+              href={`/players/${champion.player_id}`}
+              className="font-display text-2xl font-bold hover:text-accent"
+            >
+              {champion.name}
+            </Link>
+            <p className="text-xs text-foreground-soft">{champion.games}半荘</p>
+          </div>
+          <p className="ml-auto shrink-0 font-mono text-2xl font-semibold tabular-nums text-gold">
+            {pt(champion.avg_score)}
+            <span className="ml-1 text-sm font-sans font-normal text-foreground-soft">pt/半荘</span>
+          </p>
+        </div>
+      )}
+
+      <div className="mb-4 flex items-center gap-2 text-sm">
+        <label htmlFor="min_games" className="text-foreground-soft">
           最低半荘数
         </label>
         <input
@@ -147,30 +183,29 @@ export default function Leaderboard({ stats }: { stats: PlayerStats[] }) {
           min={0}
           value={minGames}
           onChange={(e) => setMinGames(Math.max(0, Number(e.target.value) || 0))}
-          className="w-20 rounded border border-black/15 bg-transparent px-2 py-1 dark:border-white/20"
+          className="w-20 rounded-md border border-line bg-surface px-2 py-1 font-mono"
         />
-        <span className="text-black/40 dark:text-white/40">
+        <span className="text-foreground-soft">
           以上({visibleStats.length}/{stats.length}人を表示)
         </span>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto rounded-xl border border-line bg-surface">
         <table className="w-full min-w-[820px] text-sm">
           <thead>
-            <tr className="border-b border-black/10 text-left dark:border-white/15">
-              <th className="py-2 pr-3">#</th>
+            <tr className="border-b border-line text-left">
+              <th className="py-3 pr-3 pl-4">#</th>
               {COLUMNS.map((col) => (
-                <th
-                  key={col.key}
-                  className={`py-2 pr-3 ${col.align === 'left' ? 'text-left' : 'text-right'}`}
-                >
+                <th key={col.key} className={`py-3 pr-3 ${col.align === 'left' ? 'text-left' : 'text-right'}`}>
                   <button
                     type="button"
                     onClick={() => toggleSort(col.key)}
-                    className="inline-flex items-center gap-1 hover:underline"
+                    className="inline-flex items-center gap-1 text-foreground-soft hover:text-foreground"
                   >
                     {col.label}
-                    {sortKey === col.key && <span>{sortDir === 'asc' ? '▲' : '▼'}</span>}
+                    {sortKey === col.key && (
+                      <span className="text-accent">{sortDir === 'asc' ? '▲' : '▼'}</span>
+                    )}
                   </button>
                 </th>
               ))}
@@ -178,15 +213,19 @@ export default function Leaderboard({ stats }: { stats: PlayerStats[] }) {
           </thead>
           <tbody>
             {sorted.map((s, i) => (
-              <tr key={s.player_id} className="border-b border-black/5 dark:border-white/10">
-                <td className="py-2 pr-3">{i + 1}</td>
+              <tr key={s.player_id} className="border-b border-line/70 last:border-b-0">
+                <td className="py-2.5 pr-3 pl-4">
+                  <TileBadge rank={i + 1} size="sm" />
+                </td>
                 {COLUMNS.map((col) => (
                   <td
                     key={col.key}
-                    className={`py-2 pr-3 ${col.align === 'left' ? 'text-left' : 'text-right'} ${cellClass(col, s)}`}
+                    className={`py-2.5 pr-3 font-mono tabular-nums ${
+                      col.align === 'left' ? 'text-left font-sans' : 'text-right'
+                    } ${cellClass(col, s)}`}
                   >
                     {col.key === 'name' ? (
-                      <Link href={`/players/${s.player_id}`} className="underline">
+                      <Link href={`/players/${s.player_id}`} className="font-sans hover:text-accent hover:underline">
                         {s.name}
                       </Link>
                     ) : (
