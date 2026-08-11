@@ -52,7 +52,10 @@ export default async function YakumanPage() {
                   <p className="mt-1 text-sm text-foreground-soft">{dateOnly(r.game?.played_at)}</p>
                   <p className="mt-2 text-sm">
                     {r.winner ? (
-                      <Link href={`/players/${r.winner.player_id}`} className="font-medium hover:text-accent hover:underline">
+                      <Link
+                        href={`/players/${r.winner.player_id}`}
+                        className="font-medium underline decoration-line underline-offset-2 hover:text-accent hover:decoration-accent"
+                      >
                         {r.winner.name}
                       </Link>
                     ) : (
@@ -66,7 +69,7 @@ export default async function YakumanPage() {
                           {' '}
                           <Link
                             href={`/players/${r.target.player_id}`}
-                            className="font-medium text-foreground hover:text-accent hover:underline"
+                            className="font-medium text-foreground underline decoration-line underline-offset-2 hover:text-accent hover:decoration-accent"
                           >
                             {r.target.name}
                           </Link>{' '}

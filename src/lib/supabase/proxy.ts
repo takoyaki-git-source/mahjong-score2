@@ -1,7 +1,29 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+const SITE_AUTH_COOKIE = 'site_auth'
+
 export async function updateSession(request: NextRequest) {
+  const { pathname } = request.nextUrl
+
+  // サイト全体の合言葉ゲート。SITE_PASSWORD未設定なら無効(ローカル開発などでは気にせず使える)。
+  const sitePassword = process.env.SITE_PASSWORD
+  if (sitePassword && pathname !== '/enter') {
+    const authed = request.cookies.get(SITE_AUTH_COOKIE)?.value === sitePassword
+    if (!authed) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/enter'
+      url.search = `?next=${encodeURIComponent(pathname + request.nextUrl.search)}`
+      return NextResponse.redirect(url)
+    }
+  }
+
+  // 公開ページ(/admin以外)はログイン確認が不要なので、Supabaseへの往復(このためだけの
+  // 追加レイテンシ)を省いて素通しする。/admin/loginも当然素通し(そこでログインするので)。
+  if (!pathname.startsWith('/admin') || pathname.startsWith('/admin/login')) {
+    return NextResponse.next({ request })
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   })

@@ -333,7 +333,10 @@ export default async function PlayerPage({
                         {y.target ? (
                           <>
                             放銃:{' '}
-                            <Link href={`/players/${y.target.player_id}`} className="text-foreground hover:text-accent hover:underline">
+                            <Link
+                              href={`/players/${y.target.player_id}`}
+                              className="text-foreground underline decoration-line underline-offset-2 hover:text-accent hover:decoration-accent"
+                            >
                               {y.target.name}
                             </Link>
                           </>
@@ -366,7 +369,10 @@ export default async function PlayerPage({
                       {matchups.map((m) => (
                         <tr key={m.player_b} className="border-b border-line/70 last:border-b-0">
                           <td className="py-2.5 pr-3 pl-4">
-                            <Link href={`/players/${m.player_b}`} className="hover:text-accent hover:underline">
+                            <Link
+                              href={`/players/${m.player_b}`}
+                              className="underline decoration-line underline-offset-2 hover:text-accent hover:decoration-accent"
+                            >
                               {m.name_b}
                             </Link>
                           </td>

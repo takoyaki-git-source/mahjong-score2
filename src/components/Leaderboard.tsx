@@ -168,7 +168,7 @@ export default function Leaderboard({ stats }: { stats: PlayerStats[] }) {
                 <div className="min-w-0">
                   <Link
                     href={`/players/${p.player_id}`}
-                    className="block truncate font-display text-lg font-bold hover:text-accent"
+                    className="block truncate font-display text-lg font-bold underline decoration-line underline-offset-2 hover:text-accent hover:decoration-accent"
                   >
                     {p.name}
                   </Link>
@@ -230,7 +230,10 @@ export default function Leaderboard({ stats }: { stats: PlayerStats[] }) {
                     } ${cellClass(col, s)}`}
                   >
                     {col.key === 'name' ? (
-                      <Link href={`/players/${s.player_id}`} className="font-sans hover:text-accent hover:underline">
+                      <Link
+                        href={`/players/${s.player_id}`}
+                        className="font-sans underline decoration-line underline-offset-2 hover:text-accent hover:decoration-accent"
+                      >
                         {s.name}
                       </Link>
                     ) : (

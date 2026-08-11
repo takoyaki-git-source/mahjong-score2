@@ -12,7 +12,8 @@
 - **DB / Auth**: Supabase (Postgres)
 - **デプロイ**: Vercel — **本番: https://mahjong-score2.vercel.app**(GitHubリポジトリ連携済み、`main`へのpushで自動デプロイ)
   - Vercelプロジェクト: `takoyaki0204-1024s-projects/mahjong-score2`。Vercel CLIでログイン済み(`vercel whoami` → `takoyaki0204-1024`)、`.vercel/project.json`でリンク済み
-  - 環境変数(`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`)はVercel側のProduction/Preview/Development全環境に設定済み
+  - 環境変数(`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` / `SITE_PASSWORD`)はVercel側のProduction/Preview/Development全環境に設定済み
+  - `vercel.json`で`regions: ["syd1"]`を指定(Supabaseがap-southeast-2/Sydneyのため、Vercel Functionsもシドニーにピン留めしてDBとの往復レイテンシを削減。Hobbyプランでも単一リージョン指定は可能。⚠️ Routing Middleware(`src/proxy.ts`)はこの設定に関わらず全リージョンにデプロイされる仕様のため、regions指定だけではmiddleware自体のレイテンシは改善しない)
 - **リポジトリ**: https://github.com/takoyaki-git-source/mahjong-score2
 
 ⚠️ **Next.js 16は学習データにある情報から破壊的変更が多い**(例: `middleware.ts`→`proxy.ts`へ改名、`LayoutProps`等のルート型は`next dev`/`next build`実行時に自動生成される等)。コードを書く前に`node_modules/next/dist/docs/`配下の同梱ドキュメントを確認すること。
@@ -35,14 +36,19 @@ frontend-designスキルで検討したビジュアルデザインを適用済�
 - ⚠️ 判子(朱肉のスタンプ)モチーフの`HankoStamp`コンポーネントを一度作ったが、ユーザーに「よくわからないので不要」とフィードバックされ**全箇所から削除・コンポーネント自体も削除済み**。今後この方向のモチーフは避ける
 - `Leaderboard`のヒーロー表示は**平均pt上位3人(金銀銅のpodium)**。足切り基準(その期間の参加者の半荘数の**中央値の半分未満・最低5半荘のフロア**、かつ**参加日数2日未満**)を満たさない人は対象外(該当者が0人ならフォールバックで全員を対象)。足切りの実数値は画面に明示表示し、下の表にも同じ足切りを適用するかはチェックボックスで切り替え可能
 - 期間指定に年単位ボタン(2016〜2026等)を追加。`available_years()` RPCで`games`テーブルから存在する年を動的に取得し`PeriodSelector`に渡す
+- プレイヤー名などのリンクは常時`underline decoration-line`(下線を常時薄く表示、hoverで`text-accent`+`decoration-accent`)にしている。⚠️ 以前は`hover:underline`のみでhover専用スタイルだったが、スマホ(タッチデバイス)では常にhover状態が無いため「クリックできることが分からない」とフィードバックがあり修正
 
 ## アクセスモデル
 
 - **書き込み(半荘結果の入力・編集)**: 自分(オーナー)のみ。Supabase Authでログインした本人だけが可能。
   - オーナーアカウント作成済み: `takoyaki0204@gmail.com`(Supabaseダッシュボードから作成、`role: authenticated`)。Next.js側では`supabase.auth.signInWithPassword({ email, password })`でログインする想定
   - 入力・編集系のページは`/admin`配下に置く方針。`src/proxy.ts`(旧middleware)で`/admin`配下のみ未ログイン時に`/admin/login`へリダイレクトする(それ以外の全ページは未ログインでも閲覧可能)
-- **閲覧(成績・分析画面)**: 誰でも閲覧可能。Vercelにデプロイして友人にもURLを共有する想定。トップページ(`/`)が成績一覧、`/players/[id]`が個人詳細
-- → RLSポリシーは「SELECT: 誰でも許可」「INSERT/UPDATE/DELETE: authenticatedロールのみ許可」で設計する(設定済み)。
+- **閲覧(成績・分析画面)**: 友人には合言葉(共有パスワード)を伝えて見てもらう想定。トップページ(`/`)が成績一覧、`/players/[id]`が個人詳細
+  - サイト全体(`/admin`含む全ページ)を`SITE_PASSWORD`環境変数による合言葉ゲートで保護。`src/lib/supabase/proxy.ts`の`updateSession`冒頭で、`site_auth`Cookieの値が`SITE_PASSWORD`と一致しなければ`/enter`(`src/app/enter/page.tsx`)へリダイレクトする。`/enter`はServer Action(`src/app/enter/actions.ts`の`unlock`)でパスワードを検証し、一致すればhttpOnly Cookie(180日)をセットして元のページへ戻す
+  - `SITE_PASSWORD`が未設定ならゲート自体が無効(ローカル開発で毎回入力しなくて済む)。Cookieの`secure`属性は本番のみ有効(`NODE_ENV === 'production'`、ローカルのhttp開発でも動くように)
+  - 認可の粒度は個人ごとのID/PWではなく友人グループ全体で1つの合言葉(採用理由: 26人分のアカウント登録は「気軽に成績を見る」用途に対して過剰な摩擦になるため)。この合言葉ゲートと`/admin`のSupabase Auth(オーナーのみ)は独立した別レイヤー
+  - ⚠️ Vercel純正のDeployment Protection(パスワード保護)は本番ドメインに使うにはPro以上限定(Hobbyでは非対応、Proでも$150/月のAdvanced Deployment Protectionアドオンが必要)と判明したため、自前のCookieゲートを実装する方針にした
+- → RLSポリシーは「SELECT: 誰でも許可」「INSERT/UPDATE/DELETE: authenticatedロールのみ許可」で設計する(設定済み)。合言葉ゲートはアプリ層の保護であり、RLS/Data APIレベルでは変わらずanonキーで直接SELECTは可能な点に注意(友人限定の運用を想定した簡易的な保護)。
 
 ### 実装済みページ
 
@@ -57,6 +63,8 @@ frontend-designスキルで検討したビジュアルデザインを適用済�
 - `src/components/TrendChart.tsx`: 折れ線グラフ(Client Component、依存ライブラリ無しの自前SVG実装、dataviz skillのマーク仕様に準拠)。crosshair+tooltip、2pxライン、末尾に直接ラベル。⚠️ Server ComponentからClient Componentへは関数をpropsで渡せない(シリアライズ不可)ため、`valueFormat`/`dateFormat`のような関数ではなく`format: 'pt'|'rank'`や`monthly: boolean`のような文字列/真偽値のpropsでフォーマットを制御する設計にしている
 - `src/app/yakuman/page.tsx`: 役満記録一覧(公開ページ)。`yakuman_events`を`games`(日付)・`players`(和了者・放銃者)とPostgRESTの埋め込みクエリ(`!fk制約名`で明示指定、`player_id`/`target_player_id`の2つのFKがあるため)で結合。日付降順で表示(時刻は`src/lib/format.ts`の`dateOnly()`で除去)、放銃者が無ければ「ツモ」
 - `src/components/PeriodSelector.tsx` / `src/lib/period.ts`: 期間指定UI(共通コンポーネント)。プリセットはリンク、カスタム期間は`<input type="date">`を使ったGETフォーム(JS不要)。`globals.css`に`color-scheme: light`/`dark`を設定していないとダークモード時にブラウザ標準のカレンダーアイコンが背景に同化して見えなくなる不具合があったため設定済み
+- `src/app/enter/page.tsx` / `src/app/enter/actions.ts`: サイト全体の合言葉ゲート画面。フォーム送信は`'use server'`のServer Action(`unlock`)で、`SITE_PASSWORD`と一致すれば`site_auth` Cookie(httpOnly, 180日)をセットして`next`パラメータの元のページへ戻す
+- `src/app/manifest.ts`: PWA用Webマニフェスト(`MetadataRoute.Manifest`)。`name`/`icons`(192/512/maskable)/`theme_color`/`display: standalone`を定義。`public/icon-192.png` `icon-512.png` `icon-maskable-512.png` `apple-touch-icon.png`は麻雀の「中」牌をモチーフにしたSVGから`qlmanage`(macOSのQuickLook、SVGラスタライズ用に代用)+`sips`でリサイズ生成したもの。`src/app/layout.tsx`の`metadata`(`manifest`/`icons`/`appleWebApp`)と`viewport`(`themeColor`)で読み込む。オフライン対応のService Workerまでは実装していない(Supabaseのライブデータに依存するアプリのため、インストール可能にする軽量PWA化のみを目的とした)
 - `src/lib/types.ts`: Supabase未生成型(Database型)の代わりに、RPCの戻り値を手動で型定義(`PlayerStats`/`MatchupStats`/`PlayerYakumanStats`)。`supabase-js`の`.returns<T>()`はDatabase型generic無しだと型エラーになるため、`await`後に`as T[]`でキャストする方式を採用
 - `src/app/admin/login/page.tsx`: ログインフォーム(Client Component、`supabase.auth.signInWithPassword`)
 - `src/app/admin/page.tsx`: 半荘入力画面(Server Componentで`players`/`mahjong_rules`/`player_recent_year_games`/`player_base_stats`を取得し`GameForm`に渡す)。プレイヤーの並び順は「直近1年の参加数→累計参加数→五十音順(`Intl.Collator('ja')`による近似。読み仮名列が無いため完全な五十音順ではない)」
@@ -236,6 +244,10 @@ frontend-designスキルで検討したビジュアルデザインを適用済�
 - [x] 個人詳細ページの率カードに件数を併記
 - [ ] スプレッドシートのコピペインポート機能 → **ユーザー希望で保留**
 - [x] Vercelデプロイ設定(本番: https://mahjong-score2.vercel.app、GitHub連携で`main`へのpush=自動デプロイ)
+- [x] ページ遷移が「もっさりしてる」問題への対応 → `vercel.json`でVercel FunctionsをSupabaseと同じシドニー(`syd1`)にピン留め + `src/lib/supabase/proxy.ts`が全ページで不要なSupabase認証往復をしていたのを`/admin`配下のみに限定。本番で3.3秒→0.7秒程度まで改善確認
+- [x] スマホでプレイヤー名等のリンクがクリックできると分かりづらい問題 → `hover:underline`のみだったリンクを常時`underline decoration-line`表示に変更
+- [x] PWA化(ホーム画面に追加してインストール可能に) → `src/app/manifest.ts` + アイコン一式(`public/icon-*.png`、麻雀の「中」牌モチーフ)。オフラインキャッシュ(Service Worker)は非対応(ライブデータ前提のため)
+- [x] サイトの公開範囲を絞る(合言葉ゲート) → `SITE_PASSWORD`環境変数+`src/app/enter/`によるサイト全体Cookieゲートを追加。Vercel純正のパスワード保護はHobbyでは本番ドメインに使えないため自前実装を選択(ユーザーとの相談の上)
 
 <!-- BEGIN:nextjs-agent-rules -->
 
