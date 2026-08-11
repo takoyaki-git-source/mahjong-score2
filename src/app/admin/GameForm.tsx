@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
 type Player = { player_id: number; name: string }
+type Mode = 'raw' | 'points'
 
 const SEAT_COUNT = 4
 
@@ -17,20 +18,26 @@ function todayLocalISODate() {
 export default function GameForm({ players }: { players: Player[] }) {
   const router = useRouter()
 
+  const [mode, setMode] = useState<Mode>('raw')
   const [playedAt, setPlayedAt] = useState(todayLocalISODate())
   const [rows, setRows] = useState(
-    Array.from({ length: SEAT_COUNT }, () => ({ playerId: '', score: '' }))
+    Array.from({ length: SEAT_COUNT }, () => ({ playerId: '', value: '' }))
   )
   const [tobiBy, setTobiBy] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastGameId, setLastGameId] = useState<string | null>(null)
 
-  const scoreSum = rows.reduce((sum, r) => sum + (Number(r.score) || 0), 0)
+  const valueSum = rows.reduce((sum, r) => sum + (Number(r.value) || 0), 0)
   const selectedPlayerIds = rows.map((r) => r.playerId).filter(Boolean)
 
-  function updateRow(i: number, patch: Partial<{ playerId: string; score: string }>) {
+  function updateRow(i: number, patch: Partial<{ playerId: string; value: string }>) {
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
+  }
+
+  function switchMode(next: Mode) {
+    setMode(next)
+    setError(null)
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -46,26 +53,28 @@ export default function GameForm({ players }: { players: Player[] }) {
       setError('同じプレイヤーが重複しています')
       return
     }
-    if (rows.some((r) => r.score === '')) {
-      setError('4人分の点数を入力してください')
+    if (rows.some((r) => r.value === '')) {
+      setError(mode === 'raw' ? '4人分の点数を入力してください' : '4人分のポイントを入力してください')
       return
     }
 
     setSubmitting(true)
     const supabase = createClient()
-    const { data, error: rpcError } = await supabase.rpc('submit_game', {
+    const rpcName = mode === 'raw' ? 'submit_game' : 'submit_game_points'
+    const valueParamPrefix = mode === 'raw' ? 'p_score' : 'p_points'
+    const { data, error: rpcError } = await supabase.rpc(rpcName, {
       p_played_at: playedAt,
       p_player1: Number(rows[0].playerId),
-      p_score1: Number(rows[0].score),
+      [`${valueParamPrefix}1`]: Number(rows[0].value),
       p_seat1: 1,
       p_player2: Number(rows[1].playerId),
-      p_score2: Number(rows[1].score),
+      [`${valueParamPrefix}2`]: Number(rows[1].value),
       p_seat2: 2,
       p_player3: Number(rows[2].playerId),
-      p_score3: Number(rows[2].score),
+      [`${valueParamPrefix}3`]: Number(rows[2].value),
       p_seat3: 3,
       p_player4: Number(rows[3].playerId),
-      p_score4: Number(rows[3].score),
+      [`${valueParamPrefix}4`]: Number(rows[3].value),
       p_seat4: 4,
       p_tobi_target: null,
       p_tobi_by: tobiBy ? Number(tobiBy) : null,
@@ -78,7 +87,7 @@ export default function GameForm({ players }: { players: Player[] }) {
     }
 
     setLastGameId(data as string)
-    setRows(Array.from({ length: SEAT_COUNT }, () => ({ playerId: '', score: '' })))
+    setRows(Array.from({ length: SEAT_COUNT }, () => ({ playerId: '', value: '' })))
     setTobiBy('')
     router.refresh()
   }
@@ -88,6 +97,39 @@ export default function GameForm({ players }: { players: Player[] }) {
 
   return (
     <form onSubmit={handleSubmit} className="max-w-xl space-y-6">
+      <div>
+        <span className="mb-1 block text-sm font-medium">入力モード</span>
+        <div className="inline-flex rounded-md border border-black/15 p-0.5 dark:border-white/20">
+          <button
+            type="button"
+            onClick={() => switchMode('raw')}
+            className={`rounded px-3 py-1.5 text-sm ${
+              mode === 'raw'
+                ? 'bg-foreground text-background'
+                : 'text-black/60 dark:text-white/60'
+            }`}
+          >
+            素点(自動計算)
+          </button>
+          <button
+            type="button"
+            onClick={() => switchMode('points')}
+            className={`rounded px-3 py-1.5 text-sm ${
+              mode === 'points'
+                ? 'bg-foreground text-background'
+                : 'text-black/60 dark:text-white/60'
+            }`}
+          >
+            ポイント(計算済み)
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-black/50 dark:text-white/50">
+          {mode === 'raw'
+            ? '半荘終了時の素点を入力すると、ウマ・オカ・トビを自動計算します。'
+            : 'すでにウマ・オカ・トビ計算済みの最終ポイントをそのまま記録します(自動計算は行いません)。'}
+        </p>
+      </div>
+
       <div>
         <label htmlFor="played_at" className="mb-1 block text-sm font-medium">
           対局日
@@ -124,13 +166,15 @@ export default function GameForm({ players }: { players: Player[] }) {
               </select>
             </div>
             <div className="w-28">
-              <label className="mb-1 block text-sm font-medium">点数</label>
+              <label className="mb-1 block text-sm font-medium">
+                {mode === 'raw' ? '点数' : 'ポイント'}
+              </label>
               <input
                 type="number"
                 required
-                step={100}
-                value={row.score}
-                onChange={(e) => updateRow(i, { score: e.target.value })}
+                step={mode === 'raw' ? 100 : 1}
+                value={row.value}
+                onChange={(e) => updateRow(i, { value: e.target.value })}
                 className={inputClass}
               />
             </div>
@@ -138,11 +182,14 @@ export default function GameForm({ players }: { players: Player[] }) {
         ))}
       </div>
 
-      <p className="text-sm text-black/60 dark:text-white/60">
-        合計: {scoreSum.toLocaleString()}点{scoreSum !== 0 && scoreSum !== 100000 && (
-          <span className="text-amber-600 dark:text-amber-400"> (通常は100,000点になるはずです)</span>
-        )}
-      </p>
+      {mode === 'raw' && (
+        <p className="text-sm text-black/60 dark:text-white/60">
+          合計: {valueSum.toLocaleString()}点
+          {valueSum !== 0 && valueSum !== 100000 && (
+            <span className="text-amber-600 dark:text-amber-400"> (通常は100,000点になるはずです)</span>
+          )}
+        </p>
+      )}
 
       <div>
         <label htmlFor="tobi_by" className="mb-1 block text-sm font-medium">

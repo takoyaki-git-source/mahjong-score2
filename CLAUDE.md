@@ -33,7 +33,7 @@
 
 - `src/app/admin/login/page.tsx`: ログインフォーム(Client Component、`supabase.auth.signInWithPassword`)
 - `src/app/admin/page.tsx`: 半荘入力画面(Server Componentで`players`一覧を取得し`GameForm`に渡す)
-- `src/app/admin/GameForm.tsx`: 入力フォーム本体(Client Component)。対局日・4人分のプレイヤー選択と点数・トビ加害(任意、1人まで)を入力し`submit_game` RPCを呼ぶ。合計点数が100,000点からズレていたら警告表示。実機で動作確認済み
+- `src/app/admin/GameForm.tsx`: 入力フォーム本体(Client Component)。「素点(自動計算)」/「ポイント(計算済み)」のモード切り替えがあり、素点モードは`submit_game`、ポイントモードは`submit_game_points`を呼ぶ。対局日・4人分のプレイヤー選択と点数(またはポイント)・トビ加害(任意、1人まで)を入力。素点モードのみ合計点数が100,000点からズレていたら警告表示(ポイントモードは合計が一定にならないため警告なし)。実機で動作確認済み
 - `src/app/admin/LogoutButton.tsx`: ログアウトボタン
 
 ## Supabaseプロジェクト
@@ -71,6 +71,10 @@
   - `final_score = (raw_score - base_score) / 1000 + ウマ(+1位はオカも) + トビ賞罰` を算出して`results`にINSERT
   - フロントは基本この関数を呼ぶだけで半荘登録が完結する設計
   - **設計意図**: 新アプリでは半荘終了時の素点(そのままの点数)を入力するだけで、ウマ・オカ・トビの計算は`submit_game`が自動で行う。旧スプレッドシートはウマオカトビ計算後の最終ポイントしか記録していなかった(`raw_score`が過去データ全件NULLなのはこのため)ので、これは運用上の改善にあたる
+- **`submit_game_points(p_played_at, p_player1..4, p_points1..4, p_seat1..4, p_tobi_target, p_tobi_by) → text`**: `submit_game`と対になる、ポイント直接入力用のRPC(新規追加)。
+  - ウマ・オカ・トビの自動計算はしない。`final_score`にポイントをそのまま入れ、`raw_score`はNULL(過去データと同じ形)
+  - `rank`はポイント降順・同点は`seat_order`昇順で自動算出
+  - 用途: 2026-08-10分など「ウマオカトビ計算済みのポイントしか手元にない」半荘を記録する場合
 
 ### 既存のビュー(分析ロジック、構築済み)
 
@@ -165,6 +169,9 @@
 - [x] Next.jsプロジェクトの初期セットアップ(App Router, TypeScript, Tailwind, `@supabase/ssr`クライアント3種、`/admin`保護用proxy.ts)
 - [x] `/admin/login`ページ(ログインフォーム)
 - [x] 半荘結果の入力画面(`/admin`、`submit_game` RPCを呼ぶ。動作確認済み)
+- [x] 入力画面に素点/ポイントのモード切り替えを追加(`submit_game_points`関数を新規追加)
+- [ ] 2026-08-10分の10半荘をポイントモードで入力(ユーザー作業)
+- [ ] Supabase Authの「Leaked Password Protection」警告への対応(要否含めユーザーに確認)
 - [ ] 集計期間指定に対応した関数/クエリの設計
 - [ ] スプレッドシートのコピペインポート機能
 - [ ] 成績分析・可視化画面(既存ビュー群を活用)
