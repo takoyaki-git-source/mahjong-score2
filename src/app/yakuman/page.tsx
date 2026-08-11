@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { dateOnly } from '@/lib/format'
 
 type YakumanRow = {
   event_id: number
@@ -54,7 +55,7 @@ export default async function YakumanPage() {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.event_id} className="border-b border-black/5 dark:border-white/10">
-                  <td className="py-2 pr-3">{r.game?.played_at ?? '-'}</td>
+                  <td className="py-2 pr-3">{dateOnly(r.game?.played_at)}</td>
                   <td className="py-2 pr-3">{r.yakuman_type}</td>
                   <td className="py-2 pr-3">
                     {r.winner ? (

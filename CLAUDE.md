@@ -33,8 +33,8 @@
 
 - `src/app/page.tsx`(トップページ、`/`): 成績一覧。`PeriodSelector`で期間指定(全期間/直近1年/今年/カスタム。直近3ヶ月はユーザー希望で削除)し、`player_stats_for_period` RPCの結果を`Leaderboard`コンポーネントで表示
 - `src/components/Leaderboard.tsx`: 成績一覧テーブル(Client Component)。列見出しクリックでソート(トグルで昇順/降順)、列ごとにベスト(緑)/ワースト(赤)をハイライト(半荘数・名前・最終対局日は対象外)。「最低半荘数」フィルタで少数対局のプレイヤーを除外可能(ベストワースト判定にも反映される)。「最終対局日」列あり
-- `src/app/players/[id]/page.tsx`: プレイヤー個人の詳細ページ。基本集計(最終対局日含む)・連続記録・日別集計・役満・対戦相手別成績(`matchup_stats_for_period`)を表示。同じ`PeriodSelector`で期間指定可能
-- `src/app/yakuman/page.tsx`: 役満記録一覧(公開ページ)。`yakuman_events`を`games`(日付)・`players`(和了者・放銃者)とPostgRESTの埋め込みクエリ(`!fk制約名`で明示指定、`player_id`/`target_player_id`の2つのFKがあるため)で結合。日付降順で表示、放銃者が無ければ「ツモ」
+- `src/app/players/[id]/page.tsx`: プレイヤー個人の詳細ページ。基本集計(率系のカードは`28.6% (245回)`のように件数も併記、最終対局日含む)・連続記録・日別集計・役満(回数・発生率に加え、日付/役満名/放銃者orツモの個別一覧も表示)・対戦相手別成績(`matchup_stats_for_period`)を表示。同じ`PeriodSelector`で期間指定可能
+- `src/app/yakuman/page.tsx`: 役満記録一覧(公開ページ)。`yakuman_events`を`games`(日付)・`players`(和了者・放銃者)とPostgRESTの埋め込みクエリ(`!fk制約名`で明示指定、`player_id`/`target_player_id`の2つのFKがあるため)で結合。日付降順で表示(時刻は`src/lib/format.ts`の`dateOnly()`で除去)、放銃者が無ければ「ツモ」
 - `src/components/PeriodSelector.tsx` / `src/lib/period.ts`: 期間指定UI(共通コンポーネント)。プリセットはリンク、カスタム期間は`<input type="date">`を使ったGETフォーム(JS不要)。`globals.css`に`color-scheme: light`/`dark`を設定していないとダークモード時にブラウザ標準のカレンダーアイコンが背景に同化して見えなくなる不具合があったため設定済み
 - `src/lib/types.ts`: Supabase未生成型(Database型)の代わりに、RPCの戻り値を手動で型定義(`PlayerStats`/`MatchupStats`/`PlayerYakumanStats`)。`supabase-js`の`.returns<T>()`はDatabase型generic無しだと型エラーになるため、`await`後に`as T[]`でキャストする方式を採用
 - `src/app/admin/login/page.tsx`: ログインフォーム(Client Component、`supabase.auth.signInWithPassword`)
@@ -210,6 +210,9 @@
 - [x] 成績一覧・個人詳細に「最終対局日」を追加
 - [x] 役満記録の閲覧ページ(`/yakuman`、日付・役満・和了者・放銃者)
 - [x] Supabase以外へのバックアップ手段としてデータエクスポート機能(`/admin/management`、JSON全件出力)
+- [x] `/yakuman`の日付から時刻表示を除去
+- [x] 個人詳細ページに役満の個別一覧(回数だけでなく)を追加
+- [x] 個人詳細ページの率カードに件数を併記
 - [ ] スプレッドシートのコピペインポート機能 → **ユーザー希望で保留**
 - [ ] Vercelデプロイ設定
 

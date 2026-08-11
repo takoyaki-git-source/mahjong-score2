@@ -2,11 +2,24 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { resolvePeriod, type PeriodParams } from '@/lib/period'
+import { dateOnly } from '@/lib/format'
 import type { PlayerStats, MatchupStats, PlayerYakumanStats } from '@/lib/types'
 import PeriodSelector from '@/components/PeriodSelector'
 
+type YakumanDetail = {
+  event_id: number
+  yakuman_type: string
+  game: { played_at: string } | null
+  target: { player_id: number; name: string } | null
+}
+
 function pct(v: number | null) {
   return v == null ? '-' : `${(v * 100).toFixed(1)}%`
+}
+
+function pctCount(v: number | null, count: number | null, unit: '回' | '日' = '回') {
+  if (v == null) return '-'
+  return `${(v * 100).toFixed(1)}% (${count ?? 0}${unit})`
 }
 
 function pt(v: number | null) {
@@ -36,20 +49,42 @@ export default async function PlayerPage({
 
   if (!player) return notFound()
 
-  const [{ data: statsData }, { data: matchupsData }, { data: yakumanData }] = await Promise.all([
-    supabase.rpc('player_stats_for_period', { p_start: start, p_end: end }).eq('player_id', playerId),
-    supabase
-      .rpc('matchup_stats_for_period', { p_start: start, p_end: end })
-      .eq('player_a', playerId)
-      .order('games', { ascending: false }),
-    supabase.rpc('player_yakuman_stats_for_period', { p_start: start, p_end: end }).eq('player_id', playerId),
-  ])
+  const [{ data: statsData }, { data: matchupsData }, { data: yakumanData }, { data: yakumanDetailData }] =
+    await Promise.all([
+      supabase.rpc('player_stats_for_period', { p_start: start, p_end: end }).eq('player_id', playerId),
+      supabase
+        .rpc('matchup_stats_for_period', { p_start: start, p_end: end })
+        .eq('player_a', playerId)
+        .order('games', { ascending: false }),
+      supabase.rpc('player_yakuman_stats_for_period', { p_start: start, p_end: end }).eq('player_id', playerId),
+      supabase
+        .from('yakuman_events')
+        .select(
+          `
+          event_id,
+          yakuman_type,
+          game:games!yakuman_events_game_id_fkey(played_at),
+          target:players!yakuman_events_target_player_id_fkey(player_id, name)
+        `
+        )
+        .eq('player_id', playerId),
+    ])
 
   const statsRows = (statsData ?? []) as PlayerStats[]
   const matchups = (matchupsData ?? []) as MatchupStats[]
   const yakumanRows = (yakumanData ?? []) as PlayerYakumanStats[]
   const stats = statsRows[0]
   const yakuman = yakumanRows[0]
+
+  const yakumanDetails = ((yakumanDetailData ?? []) as unknown as YakumanDetail[])
+    .filter((y) => {
+      const played = y.game?.played_at
+      if (!played) return false
+      if (start && played < start) return false
+      if (end && played > end) return false
+      return true
+    })
+    .sort((a, b) => (b.game?.played_at ?? '').localeCompare(a.game?.played_at ?? ''))
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
@@ -74,12 +109,12 @@ export default async function PlayerPage({
               ['総pt', pt(stats.total_score)],
               ['平均pt', stats.avg_score],
               ['平均着順', stats.avg_rank],
-              ['1位率', pct(stats.first_rate)],
-              ['2位率', pct(stats.second_rate)],
-              ['3位率', pct(stats.third_rate)],
-              ['4位率', pct(stats.fourth_rate)],
-              ['連対率', pct(stats.rentai_rate)],
-              ['トビ率', pct(stats.tobi_rate)],
+              ['1位率', pctCount(stats.first_rate, stats.first_count)],
+              ['2位率', pctCount(stats.second_rate, stats.second_count)],
+              ['3位率', pctCount(stats.third_rate, stats.third_count)],
+              ['4位率', pctCount(stats.fourth_rate, stats.fourth_count)],
+              ['連対率', pctCount(stats.rentai_rate, stats.first_count + stats.second_count)],
+              ['トビ率', pctCount(stats.tobi_rate, stats.tobi_count)],
               ['最高pt', pt(stats.max_score)],
               ['最低pt', pt(stats.min_score)],
               ['最終対局日', stats.last_played],
@@ -121,7 +156,7 @@ export default async function PlayerPage({
                 ['参加日数', stats.play_days],
                 ['日別最高pt', pt(stats.best_day)],
                 ['日別最低pt', pt(stats.worst_day)],
-                ['プラス日数率', pct(stats.plus_rate)],
+                ['プラス日数率', pctCount(stats.plus_rate, stats.plus_days, '日')],
               ].map(([label, value]) => (
                 <div
                   key={label as string}
@@ -137,9 +172,30 @@ export default async function PlayerPage({
           {yakuman && yakuman.yakuman_count > 0 && (
             <section>
               <h2 className="mb-2 text-lg font-medium">役満</h2>
-              <p className="text-sm">
+              <p className="mb-3 text-sm">
                 {yakuman.yakuman_count}回 (発生率 {pct(yakuman.yakuman_rate)})
               </p>
+              <ul className="space-y-1 text-sm">
+                {yakumanDetails.map((y) => (
+                  <li key={y.event_id} className="flex justify-between gap-3">
+                    <span>
+                      {dateOnly(y.game?.played_at)} {y.yakuman_type}
+                    </span>
+                    <span className="text-black/50 dark:text-white/50">
+                      {y.target ? (
+                        <>
+                          放銃:{' '}
+                          <Link href={`/players/${y.target.player_id}`} className="underline">
+                            {y.target.name}
+                          </Link>
+                        </>
+                      ) : (
+                        'ツモ'
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </section>
           )}
 
