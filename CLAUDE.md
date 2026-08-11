@@ -29,6 +29,13 @@
 - **閲覧(成績・分析画面)**: 誰でも閲覧可能。Vercelにデプロイして友人にもURLを共有する想定。
 - → RLSポリシーは「SELECT: 誰でも許可」「INSERT/UPDATE/DELETE: authenticatedロールのみ許可」で設計する(設定済み)。
 
+### 実装済みページ
+
+- `src/app/admin/login/page.tsx`: ログインフォーム(Client Component、`supabase.auth.signInWithPassword`)
+- `src/app/admin/page.tsx`: 半荘入力画面(Server Componentで`players`一覧を取得し`GameForm`に渡す)
+- `src/app/admin/GameForm.tsx`: 入力フォーム本体(Client Component)。対局日・4人分のプレイヤー選択と点数・トビ加害(任意、1人まで)を入力し`submit_game` RPCを呼ぶ。合計点数が100,000点からズレていたら警告表示。実機で動作確認済み
+- `src/app/admin/LogoutButton.tsx`: ログアウトボタン
+
 ## Supabaseプロジェクト
 
 - project_id: `enurjqgzyerukhbijzea` (region: ap-southeast-2, Postgres 17)
@@ -84,7 +91,7 @@
 
 ✅ **対応済み**:
 - トビには「飛んだ側」と「飛ばした側」があり、判定方法が異なる。
-  - **飛んだ側 (`tobi_target_player_id`)**: 点数(素点 or 最終ポイント)から判定可能。過去データも新規データも`player_base_stats`の`final_score <= -50`閾値判定で統一してよい
+  - **飛んだ側 (`tobi_target_player_id`)**: 点数(素点 or 最終ポイント)から判定可能。過去データも新規データも`player_base_stats`の`final_score <= -50`閾値判定で統一してよい。この方針により`/admin`の入力フォームでは飛んだ側の入力欄は設けていない(常に`p_tobi_target: null`で`submit_game`を呼ぶ。複数人が同時に飛ぶケースにも対応できる)
   - **飛ばした側 (`tobi_by_player_id`)**: 誰の手で飛ばされたかは点数からは分からず、`submit_game`呼び出し時に明示入力するしかない。過去データ(過去のスプレッドシートはウマオカトビ計算後の最終ポイントのみで素点自体が無かった)にはこの情報がほぼ無いため、「トビらせた回数」のような加害側の集計は将来作っても過去分は正確にカウントできない(仕様上の制約であり不具合ではない)
 - 全18ビューに`security_invoker = true`を設定し`SECURITY DEFINER`警告を解消
 - `generate_game_id` / `submit_game`に`search_path`を固定し警告を解消
@@ -156,9 +163,9 @@
 - [x] Supabase Authでオーナー用アカウントを1つ作成(`takoyaki0204@gmail.com`)
 - [x] 直近の未取り込みデータを確認(2026-08-10分、10半荘。ポイントのみ形式、ユーザーが後で入力予定)
 - [x] Next.jsプロジェクトの初期セットアップ(App Router, TypeScript, Tailwind, `@supabase/ssr`クライアント3種、`/admin`保護用proxy.ts)
+- [x] `/admin/login`ページ(ログインフォーム)
+- [x] 半荘結果の入力画面(`/admin`、`submit_game` RPCを呼ぶ。動作確認済み)
 - [ ] 集計期間指定に対応した関数/クエリの設計
-- [ ] `/admin/login`ページ(ログインフォーム)
-- [ ] 半荘結果の入力画面(`submit_game` RPCを呼ぶ)
 - [ ] スプレッドシートのコピペインポート機能
 - [ ] 成績分析・可視化画面(既存ビュー群を活用)
 - [ ] Vercelデプロイ設定
