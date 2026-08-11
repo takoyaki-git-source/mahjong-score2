@@ -32,9 +32,12 @@
 ### 実装済みページ
 
 - `src/app/admin/login/page.tsx`: ログインフォーム(Client Component、`supabase.auth.signInWithPassword`)
-- `src/app/admin/page.tsx`: 半荘入力画面(Server Componentで`players`一覧を取得し`GameForm`に渡す)
-- `src/app/admin/GameForm.tsx`: 入力フォーム本体(Client Component)。「素点(自動計算)」/「ポイント(計算済み)」のモード切り替えがあり、素点モードは`submit_game`、ポイントモードは`submit_game_points`を呼ぶ。対局日・4人分のプレイヤー選択と点数(またはポイント)・トビ加害(任意、1人まで)を入力。素点モードのみ合計点数が100,000点からズレていたら警告表示(ポイントモードは合計が一定にならないため警告なし)。実機で動作確認済み
+- `src/app/admin/page.tsx`: 半荘入力画面(Server Componentで`players`/`mahjong_rules`/`player_recent_year_games`/`player_base_stats`を取得し`GameForm`に渡す)。プレイヤーの並び順は「直近1年の参加数→累計参加数→五十音順(`Intl.Collator('ja')`による近似。読み仮名列が無いため完全な五十音順ではない)」
+- `src/app/admin/GameForm.tsx`: 入力フォーム本体(Client Component)。「素点(自動計算)」/「ポイント(計算済み)」のモード切り替え、対局日、**適用ルール選択**、4人分のプレイヤー選択と点数(またはポイント)、トビ加害(任意、1人まで)を入力。素点モードは`submit_game`、ポイントモードは`submit_game_points`を呼ぶ。素点モードのみ入力が揃うと`compute_game_results`をデバウンス呼び出しして登録前にプレビュー表示。合計点数チェック(素点は100,000、ポイントは0からのズレを警告)。実機で動作確認済み
 - `src/app/admin/LogoutButton.tsx`: ログアウトボタン
+- `src/app/admin/settings/page.tsx`: 設定画面。プレイヤー管理とルール管理を表示
+- `src/app/admin/settings/PlayerManager.tsx`: プレイヤー一覧表示+新規追加フォーム
+- `src/app/admin/settings/RuleForm.tsx` / `RuleManager.tsx`: ルールの一覧・追加・編集(ルールごとに独立して編集可能、新規追加も可能)
 
 ## Supabaseプロジェクト
 
@@ -50,7 +53,7 @@
 | テーブル | 役割 | 実際の行数 | 備考 |
 |---|---|---|---|
 | `players` | 対局者マスタ | 26 | `player_id` PK, `name` unique |
-| `mahjong_rules` | ルール設定(ウマ・オカ・トビ賞罰など) | 1 | `rule_id=1`("kurakuen_4p"): 開始点25000, オカ+20, ウマ+10/+5/-5/-10, トビ+10/-10 |
+| `mahjong_rules` | ルール設定(ウマ・オカ・トビ賞罰など) | 1(複数登録・選択に対応済み) | `rule_id=1`("kurakuen_4p"): 開始点25000, オカ+20, ウマ+10/+5/-5/-10, トビ+10/-10。`/admin/settings`で追加・編集可能、半荘登録時に`/admin`でどのルールを適用するか選択できる |
 | `games` | 半荘(1ゲーム) | 857 | `game_id` は text PK、`YYYYMMDD_連番`形式(例: `20260811_01`)。全件`rule_id=1`。`played_at`は2016-11-05〜2026-04-30 |
 | `results` | 半荘ごとの各プレイヤーの結果 | 3428 | 857×4と一致。全件`raw_score`がNULL(旧スプレッドシートに素点の記録が無かったため)。`rank`, `final_score`(ウマオカ後の最終スコア、1000点単位), `seat_order`(1〜4の制約あり) |
 | `yakuman_events` | 役満記録 | 19 | `yakuman_type`, `player_id`(和了者), `target_player_id`(放銃者など、nullable) |
@@ -59,22 +62,22 @@
 
 なお当初`games`は858件だったが、最新の1件(`20260509_01`)は`raw_score`が入っており(他の857件は全てNULL)、`submit_game`関数の動作確認用テストデータと判明したため削除済み。プレイヤー自体(横田・山下・森内・若井)は実在の対局者なので`players`テーブルはそのまま。
 
-### 既存の関数(書き込みロジック、構築済み)
-
-`information_schema`/`pg_proc`調査で判明。半荘入力のメインロジックはほぼ完成している。
+### 既存の関数(書き込みロジック)
 
 - **`generate_game_id(p_date date) → text`**: その日の`games`の件数を見て`YYYYMMDD_連番`形式のgame_idを発行
-- **`submit_game(p_played_at, p_player1..4, p_score1..4, p_seat1..4, p_tobi_target, p_tobi_by) → text`**: 半荘結果をまとめて登録するRPC。
-  - `mahjong_rules`から`rule_id = 1`のルールを固定で参照(設定済み)
-  - `generate_game_id`でgame_id発行 → `games`にINSERT
-  - 素点(`raw_score`)の降順・同点は`seat_order`昇順で着順(`rank`)を自動算出
-  - `final_score = (raw_score - base_score) / 1000 + ウマ(+1位はオカも) + トビ賞罰` を算出して`results`にINSERT
-  - フロントは基本この関数を呼ぶだけで半荘登録が完結する設計
-  - **設計意図**: 新アプリでは半荘終了時の素点(そのままの点数)を入力するだけで、ウマ・オカ・トビの計算は`submit_game`が自動で行う。旧スプレッドシートはウマオカトビ計算後の最終ポイントしか記録していなかった(`raw_score`が過去データ全件NULLなのはこのため)ので、これは運用上の改善にあたる
-- **`submit_game_points(p_played_at, p_player1..4, p_points1..4, p_seat1..4, p_tobi_target, p_tobi_by) → text`**: `submit_game`と対になる、ポイント直接入力用のRPC(新規追加)。
+- **`compute_game_results(p_rule_id, p_player1..4, p_score1..4, p_seat1..4, p_tobi_target, p_tobi_by) → table(player_id, seat_order, raw_score, rank, final_score)`**: 素点からウマ・オカ・トビ込みの最終ポイントを計算する純粋関数(INSERTしない)。`submit_game`と`/admin`のプレビュー表示の両方から呼ばれる、計算ロジックの単一の実装元。
+  - 着順(`rank`)は素点降順・同点は`seat_order`昇順
+  - `final_score = (raw_score - base_score) / 1000 + ウマ[順位] - オカ/4 + (1位のみ+オカ全額) + トビ賞罰`
+  - ⚠️ **オカの計算に一度バグがあった**: 当初は1位に+オカを足すだけで誰からも引いていなかったため、半荘ごとに合計が+オカ分だけ増えてゼロサムになっていなかった(過去データは合計0のはずなのに矛盾)。「全員から一律オカ/4を引き、1位にオカ全額を足す」に修正しゼロサムになることを確認済み
+- **`submit_game(p_played_at, p_rule_id, p_player1..4, p_score1..4, p_seat1..4, p_tobi_target, p_tobi_by) → text`**: 半荘結果をまとめて登録するRPC。`generate_game_id`でgame_id発行→`games`にINSERT→`compute_game_results`の結果を`results`にINSERT。
+  - **設計意図**: 新アプリでは半荘終了時の素点(そのままの点数)を入力するだけで、ウマ・オカ・トビの計算は自動で行う。旧スプレッドシートはウマオカトビ計算後の最終ポイントしか記録していなかった(`raw_score`が過去データ全件NULLなのはこのため)ので、これは運用上の改善にあたる
+  - `p_rule_id`はハードコードではなくパラメータ化済み(複数ルールを切り替えて使える)
+- **`submit_game_points(p_played_at, p_rule_id, p_player1..4, p_points1..4, p_seat1..4, p_tobi_target, p_tobi_by) → text`**: `submit_game`と対になる、ポイント直接入力用のRPC。
   - ウマ・オカ・トビの自動計算はしない。`final_score`にポイントをそのまま入れ、`raw_score`はNULL(過去データと同じ形)
   - `rank`はポイント降順・同点は`seat_order`昇順で自動算出
   - 用途: 2026-08-10分など「ウマオカトビ計算済みのポイントしか手元にない」半荘を記録する場合
+
+⚠️ **既存のPL/pgSQL関数を書き換える際の注意**: `CREATE OR REPLACE FUNCTION`は引数リストが変わると新しいオーバーロードを追加するだけで古い方が残ってしまう。引数を追加/変更する場合は先に`DROP FUNCTION`すること。また関数本体内のSQL文(INSERT列数など)はCREATE時に検証されず、実際に呼び出すまでエラーに気づけない(過去に列数不一致のバグを一度作り込んだ)。関数を変更したら**必ず実際に呼び出してテストし、テストデータは削除すること**。
 
 ### 既存のビュー(分析ロジック、構築済み)
 
@@ -89,6 +92,7 @@
 | `matchup_base` / `matchup_stats` | 対戦相手別の平均着順・トップ率・ラス率 |
 | `player_yakuman_stats` | 役満率 |
 | `player_stats_all` / `player_stats_full` | 上記の統合ビュー |
+| `player_recent_year_games` | 直近1年の参加半荘数(新規追加、`/admin`のプレイヤー並び替え用) |
 
 ⚠️ **既知の課題**:
 - 全ビューが**全期間集計固定**で、「集計期間指定」の要件に未対応。期間指定に対応するには関数化(引数で期間を受け取る)かアプリ側フィルタが必要
@@ -172,6 +176,11 @@
 - [x] 入力画面に素点/ポイントのモード切り替えを追加(`submit_game_points`関数を新規追加)
 - [ ] 2026-08-10分の10半荘をポイントモードで入力(ユーザー作業)
 - [x] Supabase Authの「Leaked Password Protection」警告 → **Proプラン以上限定機能で現プランでは有効化不可と判明。対応不可のため保留**
+- [x] オカ計算のバグ修正(非ゼロサムだったのをゼロサムに)
+- [x] 半荘登録時にルールを選択可能にする(`p_rule_id`パラメータ化)
+- [x] 設定画面でルールの追加・編集を独立してできるように(`RuleManager`/`RuleForm`)
+- [x] 登録前のポイントプレビュー(`compute_game_results`を切り出してRPCプレビューに利用)
+- [x] `/admin`のプレイヤー選択プルダウンを直近1年参加数→累計参加数→五十音順(近似)でソート
 - [ ] 集計期間指定に対応した関数/クエリの設計
 - [ ] スプレッドシートのコピペインポート機能
 - [ ] 成績分析・可視化画面(既存ビュー群を活用)
