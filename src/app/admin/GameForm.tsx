@@ -11,6 +11,7 @@ type PreviewRow = { player_id: number; rank: number; final_score: number }
 type YakumanEntry = { playerId: string; type: string; targetId: string }
 
 const SEAT_COUNT = 4
+const SEAT_LABELS = ['東家(起家)', '南家', '西家', '北家']
 
 const YAKUMAN_SUGGESTIONS = [
   '国士無双',
@@ -36,15 +37,21 @@ function todayLocalISODate() {
   return new Date(now.getTime() - tzOffsetMs).toISOString().slice(0, 10)
 }
 
+function initialRows() {
+  return Array.from({ length: SEAT_COUNT }, (_, i) => ({
+    playerId: '',
+    value: '',
+    seat: String(i + 1),
+  }))
+}
+
 export default function GameForm({ players, rules }: { players: Player[]; rules: Rule[] }) {
   const router = useRouter()
 
   const [mode, setMode] = useState<Mode>('raw')
   const [playedAt, setPlayedAt] = useState(todayLocalISODate())
   const [ruleId, setRuleId] = useState(rules[0] ? String(rules[0].rule_id) : '')
-  const [rows, setRows] = useState(
-    Array.from({ length: SEAT_COUNT }, () => ({ playerId: '', value: '' }))
-  )
+  const [rows, setRows] = useState(initialRows)
   const [tobiBy, setTobiBy] = useState('')
   const [yakumanEntries, setYakumanEntries] = useState<YakumanEntry[]>([])
   const [submitting, setSubmitting] = useState(false)
@@ -55,10 +62,12 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
 
   const valueSum = rows.reduce((sum, r) => sum + (Number(r.value) || 0), 0)
   const selectedPlayerIds = rows.map((r) => r.playerId).filter(Boolean)
+  const selectedSeats = rows.map((r) => r.seat)
   const rowsComplete =
     rows.every((r) => r.playerId && r.value !== '') && new Set(selectedPlayerIds).size === SEAT_COUNT
+  const seatsValid = new Set(selectedSeats).size === SEAT_COUNT
 
-  function updateRow(i: number, patch: Partial<{ playerId: string; value: string }>) {
+  function updateRow(i: number, patch: Partial<{ playerId: string; value: string; seat: string }>) {
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
   }
 
@@ -83,7 +92,7 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
   // 素点モードのみ: 入力が揃ったら compute_game_results をデバウンス呼び出しして
   // 登録前にウマ・オカ・トビ計算後のポイントをプレビュー表示する。
   useEffect(() => {
-    if (mode !== 'raw' || !rowsComplete || !ruleId) {
+    if (mode !== 'raw' || !rowsComplete || !seatsValid || !ruleId) {
       setPreview(null)
       return
     }
@@ -95,16 +104,16 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
         p_rule_id: Number(ruleId),
         p_player1: Number(rows[0].playerId),
         p_score1: Number(rows[0].value),
-        p_seat1: 1,
+        p_seat1: Number(rows[0].seat),
         p_player2: Number(rows[1].playerId),
         p_score2: Number(rows[1].value),
-        p_seat2: 2,
+        p_seat2: Number(rows[1].seat),
         p_player3: Number(rows[2].playerId),
         p_score3: Number(rows[2].value),
-        p_seat3: 3,
+        p_seat3: Number(rows[2].seat),
         p_player4: Number(rows[3].playerId),
         p_score4: Number(rows[3].value),
-        p_seat4: 4,
+        p_seat4: Number(rows[3].seat),
         p_tobi_target: null,
         p_tobi_by: tobiBy ? Number(tobiBy) : null,
       })
@@ -115,7 +124,25 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
 
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, rowsComplete, ruleId, rows[0].playerId, rows[0].value, rows[1].playerId, rows[1].value, rows[2].playerId, rows[2].value, rows[3].playerId, rows[3].value, tobiBy])
+  }, [
+    mode,
+    rowsComplete,
+    seatsValid,
+    ruleId,
+    rows[0].playerId,
+    rows[0].value,
+    rows[0].seat,
+    rows[1].playerId,
+    rows[1].value,
+    rows[1].seat,
+    rows[2].playerId,
+    rows[2].value,
+    rows[2].seat,
+    rows[3].playerId,
+    rows[3].value,
+    rows[3].seat,
+    tobiBy,
+  ])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -132,6 +159,10 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
     }
     if (new Set(selectedPlayerIds).size !== SEAT_COUNT) {
       setError('同じプレイヤーが重複しています')
+      return
+    }
+    if (!seatsValid) {
+      setError('東南西北家が重複しています')
       return
     }
     if (rows.some((r) => r.value === '')) {
@@ -160,16 +191,16 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
       p_rule_id: Number(ruleId),
       p_player1: Number(rows[0].playerId),
       [`${valueParamPrefix}1`]: Number(rows[0].value),
-      p_seat1: 1,
+      p_seat1: Number(rows[0].seat),
       p_player2: Number(rows[1].playerId),
       [`${valueParamPrefix}2`]: Number(rows[1].value),
-      p_seat2: 2,
+      p_seat2: Number(rows[1].seat),
       p_player3: Number(rows[2].playerId),
       [`${valueParamPrefix}3`]: Number(rows[2].value),
-      p_seat3: 3,
+      p_seat3: Number(rows[2].seat),
       p_player4: Number(rows[3].playerId),
       [`${valueParamPrefix}4`]: Number(rows[3].value),
-      p_seat4: 4,
+      p_seat4: Number(rows[3].seat),
       p_tobi_target: null,
       p_tobi_by: tobiBy ? Number(tobiBy) : null,
       p_yakuman: yakumanPayload,
@@ -182,7 +213,9 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
     }
 
     setLastGameId(data as string)
-    setRows(Array.from({ length: SEAT_COUNT }, () => ({ playerId: '', value: '' })))
+    // 同じ顔ぶれで何半荘も続けて入力することが多いため、プレイヤーと座席はそのまま残し、
+    // 点数・トビ・役満だけリセットする。
+    setRows((prev) => prev.map((r) => ({ ...r, value: '' })))
     setTobiBy('')
     setYakumanEntries([])
     setPreview(null)
@@ -265,10 +298,22 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
       <div className="space-y-3">
         {rows.map((row, i) => (
           <div key={i} className="flex items-end gap-3">
+            <div className="w-32">
+              <label className="mb-1 block text-sm font-medium">座席</label>
+              <select
+                value={row.seat}
+                onChange={(e) => updateRow(i, { seat: e.target.value })}
+                className={inputClass}
+              >
+                {SEAT_LABELS.map((label, idx) => (
+                  <option key={label} value={idx + 1}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="flex-1">
-              <label className="mb-1 block text-sm font-medium">
-                {i + 1}人目{i === 0 && <span className="text-foreground-soft">(起家)</span>}
-              </label>
+              <label className="mb-1 block text-sm font-medium">プレイヤー</label>
               <select
                 required
                 value={row.playerId}
@@ -298,6 +343,7 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
             </div>
           </div>
         ))}
+        {!seatsValid && <p className="text-sm text-accent">東南西北家が重複しています</p>}
       </div>
 
       <p className="text-sm text-foreground-soft">

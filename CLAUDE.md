@@ -10,7 +10,9 @@
 
 - **フロントエンド**: Next.js 16 (App Router, Turbopack, TypeScript, Tailwind CSS v4, `src/`ディレクトリ構成)
 - **DB / Auth**: Supabase (Postgres)
-- **デプロイ**: Vercel (GitHubリポジトリ連携で自動デプロイ)
+- **デプロイ**: Vercel — **本番: https://mahjong-score2.vercel.app**(GitHubリポジトリ連携済み、`main`へのpushで自動デプロイ)
+  - Vercelプロジェクト: `takoyaki0204-1024s-projects/mahjong-score2`。Vercel CLIでログイン済み(`vercel whoami` → `takoyaki0204-1024`)、`.vercel/project.json`でリンク済み
+  - 環境変数(`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`)はVercel側のProduction/Preview/Development全環境に設定済み
 - **リポジトリ**: https://github.com/takoyaki-git-source/mahjong-score2
 
 ⚠️ **Next.js 16は学習データにある情報から破壊的変更が多い**(例: `middleware.ts`→`proxy.ts`へ改名、`LayoutProps`等のルート型は`next dev`/`next build`実行時に自動生成される等)。コードを書く前に`node_modules/next/dist/docs/`配下の同梱ドキュメントを確認すること。
@@ -233,7 +235,7 @@ frontend-designスキルで検討したビジュアルデザインを適用済�
 - [x] 個人詳細ページに役満の個別一覧(回数だけでなく)を追加
 - [x] 個人詳細ページの率カードに件数を併記
 - [ ] スプレッドシートのコピペインポート機能 → **ユーザー希望で保留**
-- [ ] Vercelデプロイ設定
+- [x] Vercelデプロイ設定(本番: https://mahjong-score2.vercel.app、GitHub連携で`main`へのpush=自動デプロイ)
 
 <!-- BEGIN:nextjs-agent-rules -->
 
