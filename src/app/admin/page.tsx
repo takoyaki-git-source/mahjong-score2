@@ -37,8 +37,8 @@ export default async function AdminPage() {
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-xl font-semibold">半荘入力</h1>
         <div className="flex items-center gap-4">
-          <Link href="/admin/settings" className="text-sm underline">
-            設定
+          <Link href="/admin/management" className="text-sm underline">
+            管理
           </Link>
           <LogoutButton />
         </div>

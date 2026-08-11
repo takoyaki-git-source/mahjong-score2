@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { resolvePeriod, type PeriodParams } from '@/lib/period'
 import type { PlayerStats } from '@/lib/types'
@@ -14,7 +15,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<Per
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
-      <h1 className="mb-1 text-xl font-semibold">成績一覧</h1>
+      <div className="mb-1 flex items-center justify-between">
+        <h1 className="text-xl font-semibold">成績一覧</h1>
+        <Link href="/yakuman" className="text-sm underline">
+          役満記録
+        </Link>
+      </div>
       <p className="mb-4 text-sm text-black/60 dark:text-white/60">
         {label}
         {start && end && ` (${start} 〜 ${end})`}
