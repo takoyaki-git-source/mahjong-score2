@@ -25,13 +25,13 @@
 
 frontend-designスキルで検討したビジュアルデザインを適用済み。麻雀牌そのものの色(生成り/象牙色の牌、發の緑、中の赤)を土台にした配色。
 
-- **配色トークン**(`src/app/globals.css`の`:root`、dark modeは`@media (prefers-color-scheme: dark)`で上書き): `--background`(生成り/暗い緑黒), `--foreground`, `--foreground-soft`(補助テキスト), `--accent`(中の赤、警告/ワースト/CTA), `--accent-2`(發の緑、ベスト/成功), `--gold`(真鍮色、強調), `--line`(罫線), `--surface`(カード背景)。Tailwindの`@theme inline`で`bg-accent`等のユーティリティにマッピング
+- **配色トークン**(`src/app/globals.css`の`:root`、dark modeは`@media (prefers-color-scheme: dark)`で上書き): `--background`(生成り/暗い緑黒), `--foreground`, `--foreground-soft`(補助テキスト), `--accent`(中の赤、警告/ワースト/CTA), `--accent-2`(發の緑、ベスト/成功), `--gold`/`--silver`/`--bronze`(金銀銅、`TileBadge`の1〜3位に対応), `--line`(罫線), `--surface`(カード背景)。Tailwindの`@theme inline`で`bg-accent`等のユーティリティにマッピング
 - **フォント**: 見出し=Shippori Mincho(`--font-display`)、本文=Zen Kaku Gothic New(`--font-sans`)、数値=Geist Mono(`--font-mono`、tabular-nums)。⚠️ **Shippori Mincho/Zen Kaku Gothic Newは`next/font/google`の型定義に`japanese`サブセットが無く(`latin`/`latin-ext`のみ)ビルドエラーになるため、`next/font/google`を使わず`src/app/layout.tsx`の`<head>`内に`<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=...">`で直接読み込んでいる。`globals.css`側は`--font-display-family`/`--font-sans-family`にフォント名文字列を直書きして`@theme inline`でマッピング
 - 本文背景に薄い格子模様(牌が並ぶ卓面をイメージ、`body`の`background-image`)
-- `src/components/TileBadge.tsx`: 牌を模した角丸バッジで順位を表示(成績一覧の`#`列、ヒーロー表示)。1位のみgold、他はニュートラル
-- `src/components/SiteHeader.tsx` / `AdminHeader.tsx`: 公開ページ/管理ページ共通のヘッダー(ロゴ文字列「麻雀成績」+ナビ)
+- `src/components/TileBadge.tsx`: 牌を模した角丸バッジで順位を表示(成績一覧の`#`列、ヒーローのpodium)。1〜3位はgold/silver/bronze、他はニュートラル
+- `src/components/SiteHeader.tsx` / `AdminHeader.tsx`: 公開ページ/管理ページ共通のヘッダー(ロゴ文字列「麻雀成績」+ナビ)。アイコンは付けていない
 - ⚠️ 判子(朱肉のスタンプ)モチーフの`HankoStamp`コンポーネントを一度作ったが、ユーザーに「よくわからないので不要」とフィードバックされ**全箇所から削除・コンポーネント自体も削除済み**。今後この方向のモチーフは避ける
-- `Leaderboard`のヒーロー表示(この期間の首位)は**平均pt**基準(総ptだと単に参加数が多い人が有利なため)。対局数が極端に少ないと運の影響が大きいので、その期間の参加者の半荘数の**中央値の半分未満(最低5半荘のフロア付き)**は対象外にする、というロジックで選出(該当者が0人ならフォールバックで全員を対象にする)
+- `Leaderboard`のヒーロー表示は**平均pt上位3人(金銀銅のpodium)**。足切り基準(その期間の参加者の半荘数の**中央値の半分未満・最低5半荘のフロア**、かつ**参加日数2日未満**)を満たさない人は対象外(該当者が0人ならフォールバックで全員を対象)。足切りの実数値は画面に明示表示し、下の表にも同じ足切りを適用するかはチェックボックスで切り替え可能
 - 期間指定に年単位ボタン(2016〜2026等)を追加。`available_years()` RPCで`games`テーブルから存在する年を動的に取得し`PeriodSelector`に渡す
 
 ## アクセスモデル
@@ -44,9 +44,15 @@ frontend-designスキルで検討したビジュアルデザインを適用済�
 
 ### 実装済みページ
 
-- `src/app/page.tsx`(トップページ、`/`): 成績一覧。`PeriodSelector`で期間指定(全期間/直近1年/今年/年単位ボタン/カスタム。直近3ヶ月はユーザー希望で削除)し、`player_stats_for_period` RPCの結果を`Leaderboard`コンポーネントで表示
-- `src/components/Leaderboard.tsx`: 成績一覧テーブル(Client Component)。列見出しクリックでソート(トグルで昇順/降順)、列ごとにベスト(緑)/ワースト(赤)をハイライト(半荘数・名前・最終対局日は対象外)。「最低半荘数」フィルタで少数対局のプレイヤーを除外可能(ベストワースト判定にも反映される)。「最終対局日」列あり
-- `src/app/players/[id]/page.tsx`: プレイヤー個人の詳細ページ。基本集計(率系のカードは`28.6% (245回)`のように件数も併記、最終対局日含む)・連続記録・日別集計・役満(回数・発生率に加え、日付/役満名/放銃者orツモの個別一覧も表示)・対戦相手別成績(`matchup_stats_for_period`)を表示。同じ`PeriodSelector`で期間指定可能
+- `src/app/page.tsx`(トップページ、`/`): 成績一覧。`PeriodSelector`で期間指定(全期間/直近1年/今年/年単位ボタン`available_years()`/カスタム。直近3ヶ月はユーザー希望で削除)し、`player_stats_for_period` RPCの結果を`Leaderboard`コンポーネントで表示
+- `src/components/Leaderboard.tsx`: 成績一覧テーブル(Client Component)。
+  - 列見出しクリックでソート(トグルで昇順/降順)、列ごとにベスト(緑)/ワースト(赤)をハイライト(半荘数・名前・最終対局日は対象外)
+  - ヒーロー表示は**平均pt上位3人(金銀銅)**。足切り基準(その期間の参加者の半荘数の中央値の半分未満・最低5半荘、かつ参加日数2日未満は除外)を画面に明示表示。この足切りをチェックボックスで下の表(ハイライト・ソート含む)にも適用できる(旧「最低半荘数」数値フィルタはユーザー希望で廃止)
+- `src/app/players/[id]/page.tsx`: プレイヤー個人の詳細ページ。
+  - 基本集計(率系のカードは`28.6% (245回)`のように件数も併記、最終対局日含む)。最高/最低ptと日別最高/最低ptには**発生日**を、連続記録には**期間(開始日〜終了日)と半荘数**をcaptionとして表示(`results`テーブルを個別取得して`findMaxStreak`等でJS側で算出。`player_stats_for_period`は最大値の数値しか返さないため)
+  - 「推移」セクションに`TrendChart`を3つ配置: 累計pt推移、平均pt(直近20半荘の移動平均)、平均着順(同、`higherIsBetter=false`)。累積平均ではなく移動平均を採用(対局数が多い人ほど累積平均は終盤動かなくなり「最近の調子」が見えなくなるため)
+  - 役満(回数・発生率に加え、日付/役満名/放銃者orツモの個別一覧も表示)・対戦相手別成績(`matchup_stats_for_period`)を表示。同じ`PeriodSelector`で期間指定可能
+- `src/components/TrendChart.tsx`: 折れ線グラフ(Client Component、依存ライブラリ無しの自前SVG実装、dataviz skillのマーク仕様に準拠)。crosshair+tooltip、2pxライン、末尾に直接ラベル。⚠️ Server ComponentからClient Componentへは関数をpropsで渡せない(シリアライズ不可)ため、`valueFormat`/`dateFormat`のような関数ではなく`format: 'pt'|'rank'`や`monthly: boolean`のような文字列/真偽値のpropsでフォーマットを制御する設計にしている
 - `src/app/yakuman/page.tsx`: 役満記録一覧(公開ページ)。`yakuman_events`を`games`(日付)・`players`(和了者・放銃者)とPostgRESTの埋め込みクエリ(`!fk制約名`で明示指定、`player_id`/`target_player_id`の2つのFKがあるため)で結合。日付降順で表示(時刻は`src/lib/format.ts`の`dateOnly()`で除去)、放銃者が無ければ「ツモ」
 - `src/components/PeriodSelector.tsx` / `src/lib/period.ts`: 期間指定UI(共通コンポーネント)。プリセットはリンク、カスタム期間は`<input type="date">`を使ったGETフォーム(JS不要)。`globals.css`に`color-scheme: light`/`dark`を設定していないとダークモード時にブラウザ標準のカレンダーアイコンが背景に同化して見えなくなる不具合があったため設定済み
 - `src/lib/types.ts`: Supabase未生成型(Database型)の代わりに、RPCの戻り値を手動で型定義(`PlayerStats`/`MatchupStats`/`PlayerYakumanStats`)。`supabase-js`の`.returns<T>()`はDatabase型generic無しだと型エラーになるため、`await`後に`as T[]`でキャストする方式を採用

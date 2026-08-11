@@ -13,6 +13,8 @@
   --accent: #a23241;
   --accent-2: #3d6b52;
   --gold: #a9863c;
+  --silver: #8f8878;
+  --bronze: #a15a35;
   --line: #ddd0b2;
   --surface: #f8f3e8;
   /* Loaded via <link> in layout.tsx, not next/font/google: its type
@@ -30,6 +32,8 @@
   --color-accent: var(--accent);
   --color-accent-2: var(--accent-2);
   --color-gold: var(--gold);
+  --color-silver: var(--silver);
+  --color-bronze: var(--bronze);
   --color-line: var(--line);
   --color-surface: var(--surface);
   --font-display: var(--font-display-family);
@@ -45,6 +49,8 @@
     --accent: #d3626d;
     --accent-2: #6a9a80;
     --gold: #c8a765;
+    --silver: #a49c8a;
+    --bronze: #c07a4c;
     --line: #38392f;
     --surface: #222319;
     color-scheme: dark;

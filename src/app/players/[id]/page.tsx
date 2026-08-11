@@ -6,12 +6,19 @@ import { dateOnly } from '@/lib/format'
 import type { PlayerStats, MatchupStats, PlayerYakumanStats } from '@/lib/types'
 import SiteHeader from '@/components/SiteHeader'
 import PeriodSelector from '@/components/PeriodSelector'
+import TrendChart from '@/components/TrendChart'
 
 type YakumanDetail = {
   event_id: number
   yakuman_type: string
   game: { played_at: string } | null
   target: { player_id: number; name: string } | null
+}
+
+type ResultRow = {
+  final_score: number
+  rank: number
+  game: { played_at: string } | null
 }
 
 function pct(v: number | null) {
@@ -28,13 +35,51 @@ function pt(v: number | null) {
   return `${v > 0 ? '+' : ''}${v}`
 }
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
+function StatCard({
+  label,
+  value,
+  caption,
+}: {
+  label: string
+  value: string | number
+  caption?: string
+}) {
   return (
     <div className="rounded-xl border border-line bg-surface p-3.5">
       <p className="text-xs text-foreground-soft">{label}</p>
       <p className="mt-1 font-mono text-lg font-semibold tabular-nums">{value}</p>
+      {caption && <p className="mt-0.5 text-xs text-foreground-soft">{caption}</p>}
     </div>
   )
+}
+
+function findMaxStreak(rows: { date: string; match: boolean }[]) {
+  let bestLen = 0
+  let bestStart = -1
+  let bestEnd = -1
+  let curLen = 0
+  let curStart = -1
+  rows.forEach((r, i) => {
+    if (r.match) {
+      if (curLen === 0) curStart = i
+      curLen++
+      if (curLen > bestLen) {
+        bestLen = curLen
+        bestStart = curStart
+        bestEnd = i
+      }
+    } else {
+      curLen = 0
+    }
+  })
+  if (bestLen === 0) return null
+  return { length: bestLen, startDate: rows[bestStart].date, endDate: rows[bestEnd].date }
+}
+
+function streakCaption(s: { length: number; startDate: string; endDate: string } | null) {
+  if (!s) return undefined
+  const range = s.startDate === s.endDate ? s.startDate : `${s.startDate}〜${s.endDate}`
+  return `${range}(${s.length}半荘)`
 }
 
 export default async function PlayerPage({
@@ -65,6 +110,7 @@ export default async function PlayerPage({
     { data: yakumanData },
     { data: yakumanDetailData },
     { data: yearRows },
+    { data: resultRowsData },
   ] = await Promise.all([
     supabase.rpc('player_stats_for_period', { p_start: start, p_end: end }).eq('player_id', playerId),
     supabase
@@ -84,6 +130,7 @@ export default async function PlayerPage({
       )
       .eq('player_id', playerId),
     supabase.rpc('available_years'),
+    supabase.from('results').select('final_score, rank, game:games(played_at)').eq('player_id', playerId),
   ])
 
   const statsRows = (statsData ?? []) as PlayerStats[]
@@ -102,6 +149,69 @@ export default async function PlayerPage({
       return true
     })
     .sort((a, b) => (b.game?.played_at ?? '').localeCompare(a.game?.played_at ?? ''))
+
+  const resultRows = ((resultRowsData ?? []) as unknown as ResultRow[])
+    .filter((r) => {
+      const played = r.game?.played_at
+      if (!played) return false
+      if (start && played < start) return false
+      if (end && played > end) return false
+      return true
+    })
+    .sort((a, b) => (a.game?.played_at ?? '').localeCompare(b.game?.played_at ?? ''))
+
+  let cumulative = 0
+  const cumulativeSeries = resultRows.map((r) => {
+    cumulative += r.final_score
+    return { date: r.game!.played_at.slice(0, 10), value: cumulative }
+  })
+
+  // 直近20半荘の移動平均(データがそれ未満の序盤はその時点までの累積平均)。
+  // 対局数が多い人ほど累積平均は終盤ほぼ動かなくなり「最近の調子」が見えなくなるため。
+  const MOVING_WINDOW = 20
+  const movingAvgPtSeries = resultRows.map((r, i) => {
+    const windowRows = resultRows.slice(Math.max(0, i - MOVING_WINDOW + 1), i + 1)
+    const avg = windowRows.reduce((sum, w) => sum + w.final_score, 0) / windowRows.length
+    return { date: r.game!.played_at.slice(0, 10), value: Math.round(avg * 10) / 10 }
+  })
+  const movingAvgRankSeries = resultRows.map((r, i) => {
+    const windowRows = resultRows.slice(Math.max(0, i - MOVING_WINDOW + 1), i + 1)
+    const avg = windowRows.reduce((sum, w) => sum + w.rank, 0) / windowRows.length
+    return { date: r.game!.played_at.slice(0, 10), value: Math.round(avg * 100) / 100 }
+  })
+
+  // 最高/最低ptが出た日
+  const maxScoreGame = resultRows.reduce<ResultRow | null>(
+    (best, r) => (best === null || r.final_score > best.final_score ? r : best),
+    null
+  )
+  const minScoreGame = resultRows.reduce<ResultRow | null>(
+    (best, r) => (best === null || r.final_score < best.final_score ? r : best),
+    null
+  )
+
+  // 日別の合計ptと、最高/最低だった日
+  const dailyTotals = new Map<string, number>()
+  for (const r of resultRows) {
+    const date = r.game!.played_at.slice(0, 10)
+    dailyTotals.set(date, (dailyTotals.get(date) ?? 0) + r.final_score)
+  }
+  const dailyEntries = [...dailyTotals.entries()]
+  const bestDayEntry = dailyEntries.reduce<[string, number] | null>(
+    (best, e) => (best === null || e[1] > best[1] ? e : best),
+    null
+  )
+  const worstDayEntry = dailyEntries.reduce<[string, number] | null>(
+    (best, e) => (best === null || e[1] < best[1] ? e : best),
+    null
+  )
+
+  // 連続記録(トップ/ラス/ノートップ/ノーラス)の開始日・終了日・半荘数
+  const streakRows = resultRows.map((r) => ({ date: r.game!.played_at.slice(0, 10), rank: r.rank }))
+  const topStreak = findMaxStreak(streakRows.map((r) => ({ date: r.date, match: r.rank === 1 })))
+  const lastStreak = findMaxStreak(streakRows.map((r) => ({ date: r.date, match: r.rank === 4 })))
+  const noTopStreak = findMaxStreak(streakRows.map((r) => ({ date: r.date, match: r.rank !== 1 })))
+  const noLastStreak = findMaxStreak(streakRows.map((r) => ({ date: r.date, match: r.rank !== 4 })))
 
   return (
     <>
@@ -136,18 +246,54 @@ export default async function PlayerPage({
                 value={pctCount(stats.rentai_rate, stats.first_count + stats.second_count)}
               />
               <StatCard label="トビ率" value={pctCount(stats.tobi_rate, stats.tobi_count)} />
-              <StatCard label="最高pt" value={pt(stats.max_score)} />
-              <StatCard label="最低pt" value={pt(stats.min_score)} />
+              <StatCard
+                label="最高pt"
+                value={pt(stats.max_score)}
+                caption={maxScoreGame ? `(${maxScoreGame.game!.played_at.slice(0, 10)})` : undefined}
+              />
+              <StatCard
+                label="最低pt"
+                value={pt(stats.min_score)}
+                caption={minScoreGame ? `(${minScoreGame.game!.played_at.slice(0, 10)})` : undefined}
+              />
               <StatCard label="最終対局日" value={stats.last_played} />
+            </section>
+
+            <section>
+              <h2 className="mb-3 font-display text-lg font-bold">推移</h2>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <TrendChart title="累計pt推移" data={cumulativeSeries} color="var(--accent-2)" format="pt" />
+                <TrendChart
+                  title={`平均pt(直近${MOVING_WINDOW}半荘)`}
+                  data={movingAvgPtSeries}
+                  color="var(--accent-2)"
+                  format="pt"
+                />
+                <TrendChart
+                  title={`平均着順(直近${MOVING_WINDOW}半荘)`}
+                  data={movingAvgRankSeries}
+                  color="var(--gold)"
+                  higherIsBetter={false}
+                  format="rank"
+                />
+              </div>
             </section>
 
             <section>
               <h2 className="mb-3 font-display text-lg font-bold">連続記録</h2>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <StatCard label="連続トップ" value={stats.max_top_streak} />
-                <StatCard label="連続ラス" value={stats.max_last_streak} />
-                <StatCard label="連続ノートップ" value={stats.max_no_top_streak} />
-                <StatCard label="連続ノーラス" value={stats.max_no_last_streak} />
+                <StatCard label="連続トップ" value={stats.max_top_streak} caption={streakCaption(topStreak)} />
+                <StatCard label="連続ラス" value={stats.max_last_streak} caption={streakCaption(lastStreak)} />
+                <StatCard
+                  label="連続ノートップ"
+                  value={stats.max_no_top_streak}
+                  caption={streakCaption(noTopStreak)}
+                />
+                <StatCard
+                  label="連続ノーラス"
+                  value={stats.max_no_last_streak}
+                  caption={streakCaption(noLastStreak)}
+                />
               </div>
             </section>
 
@@ -155,8 +301,16 @@ export default async function PlayerPage({
               <h2 className="mb-3 font-display text-lg font-bold">日別集計</h2>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <StatCard label="参加日数" value={stats.play_days} />
-                <StatCard label="日別最高pt" value={pt(stats.best_day)} />
-                <StatCard label="日別最低pt" value={pt(stats.worst_day)} />
+                <StatCard
+                  label="日別最高pt"
+                  value={pt(stats.best_day)}
+                  caption={bestDayEntry ? `(${bestDayEntry[0]})` : undefined}
+                />
+                <StatCard
+                  label="日別最低pt"
+                  value={pt(stats.worst_day)}
+                  caption={worstDayEntry ? `(${worstDayEntry[0]})` : undefined}
+                />
                 <StatCard label="プラス日数率" value={pctCount(stats.plus_rate, stats.plus_days, '日')} />
               </div>
             </section>

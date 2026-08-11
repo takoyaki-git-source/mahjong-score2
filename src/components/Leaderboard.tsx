@@ -25,6 +25,8 @@ type Column = {
   format: (s: PlayerStats) => string
 }
 
+const MIN_PLAY_DAYS = 2
+
 function pct(v: number | null) {
   return v == null ? '-' : `${(v * 100).toFixed(1)}%`
 }
@@ -77,7 +79,7 @@ function valueOf(s: PlayerStats, key: ColumnKey): number | string | null {
 export default function Leaderboard({ stats }: { stats: PlayerStats[] }) {
   const [sortKey, setSortKey] = useState<ColumnKey>('total_score')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
-  const [minGames, setMinGames] = useState(0)
+  const [applyCutoffToTable, setApplyCutoffToTable] = useState(false)
 
   function toggleSort(key: ColumnKey) {
     if (key === sortKey) {
@@ -89,25 +91,26 @@ export default function Leaderboard({ stats }: { stats: PlayerStats[] }) {
     setSortDir(key === 'name' || col?.dir === 'lower' ? 'asc' : 'desc')
   }
 
-  const visibleStats = useMemo(
-    () => stats.filter((s) => s.games >= minGames),
-    [stats, minGames]
-  )
-
-  // 平均ptの首位を出す。ただし対局数が極端に少ないと運の影響が大きく出やすいので、
-  // その期間の参加者の半荘数の中央値の半分未満(最低5半荘)の人は対象から除外する。
-  // 除外した結果0人になる場合は元の集団にフォールバックする。
-  const champion = useMemo(() => {
-    if (visibleStats.length === 0) return null
-    const gamesSorted = [...visibleStats].map((s) => s.games).sort((a, b) => a - b)
+  // 足切り基準: 対局数が極端に少ない・参加日数が1日だけだと運の影響が大きく出やすいので、
+  // 「その期間の参加者の半荘数の中央値の半分未満(最低5半荘)」または「参加2日未満」の人を除外する。
+  // 除外した結果0人になる場合は全員にフォールバックする。ヒーロー(上位3人)は常にこの基準を使う。
+  const { threshold, eligible } = useMemo(() => {
+    if (stats.length === 0) return { threshold: 0, eligible: [] as PlayerStats[] }
+    const gamesSorted = [...stats].map((s) => s.games).sort((a, b) => a - b)
     const mid = Math.floor(gamesSorted.length / 2)
     const median =
       gamesSorted.length % 2 === 0 ? (gamesSorted[mid - 1] + gamesSorted[mid]) / 2 : gamesSorted[mid]
-    const threshold = Math.max(5, median / 2)
-    const eligible = visibleStats.filter((s) => s.games >= threshold)
-    const pool = eligible.length > 0 ? eligible : visibleStats
-    return [...pool].sort((a, b) => b.avg_score - a.avg_score)[0] ?? null
-  }, [visibleStats])
+    const t = Math.max(5, Math.ceil(median / 2))
+    const filtered = stats.filter((s) => s.games >= t && s.play_days >= MIN_PLAY_DAYS)
+    return { threshold: t, eligible: filtered.length > 0 ? filtered : stats }
+  }, [stats])
+
+  const podium = useMemo(
+    () => [...eligible].sort((a, b) => b.avg_score - a.avg_score).slice(0, 3),
+    [eligible]
+  )
+
+  const visibleStats = applyCutoffToTable ? eligible : stats
 
   const sorted = useMemo(() => {
     const copy = [...visibleStats]
@@ -153,42 +156,44 @@ export default function Leaderboard({ stats }: { stats: PlayerStats[] }) {
 
   return (
     <div>
-      {champion && (
-        <div className="mb-8 flex items-center gap-4 rounded-xl border border-gold/40 bg-surface px-5 py-4">
-          <TileBadge rank={1} size="lg" />
-          <div className="min-w-0">
-            <p className="text-xs tracking-wide text-foreground-soft">この期間の平均pt首位</p>
-            <Link
-              href={`/players/${champion.player_id}`}
-              className="font-display text-2xl font-bold hover:text-accent"
-            >
-              {champion.name}
-            </Link>
-            <p className="text-xs text-foreground-soft">{champion.games}半荘</p>
+      {podium.length > 0 && (
+        <div className="mb-8">
+          <div className="grid gap-3 sm:grid-cols-3">
+            {podium.map((p, i) => (
+              <div
+                key={p.player_id}
+                className="flex items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3"
+              >
+                <TileBadge rank={i + 1} size="lg" />
+                <div className="min-w-0">
+                  <Link
+                    href={`/players/${p.player_id}`}
+                    className="block truncate font-display text-lg font-bold hover:text-accent"
+                  >
+                    {p.name}
+                  </Link>
+                  <p className="font-mono text-sm tabular-nums text-foreground-soft">
+                    {pt(p.avg_score)}pt/半荘 ({p.games}半荘)
+                  </p>
+                </div>
+              </div>
+            ))}
           </div>
-          <p className="ml-auto shrink-0 font-mono text-2xl font-semibold tabular-nums text-gold">
-            {pt(champion.avg_score)}
-            <span className="ml-1 text-sm font-sans font-normal text-foreground-soft">pt/半荘</span>
+          <p className="mt-2 text-xs text-foreground-soft">
+            平均pt上位。足切り: {threshold}半荘以上・参加{MIN_PLAY_DAYS}日以上
           </p>
         </div>
       )}
 
-      <div className="mb-4 flex items-center gap-2 text-sm">
-        <label htmlFor="min_games" className="text-foreground-soft">
-          最低半荘数
-        </label>
+      <label className="mb-4 flex items-center gap-2 text-sm text-foreground-soft">
         <input
-          id="min_games"
-          type="number"
-          min={0}
-          value={minGames}
-          onChange={(e) => setMinGames(Math.max(0, Number(e.target.value) || 0))}
-          className="w-20 rounded-md border border-line bg-surface px-2 py-1 font-mono"
+          type="checkbox"
+          checked={applyCutoffToTable}
+          onChange={(e) => setApplyCutoffToTable(e.target.checked)}
+          className="accent-accent"
         />
-        <span className="text-foreground-soft">
-          以上({visibleStats.length}/{stats.length}人を表示)
-        </span>
-      </div>
+        下の表とハイライトにも足切り({threshold}半荘以上・参加{MIN_PLAY_DAYS}日以上)を適用する
+      </label>
 
       <div className="overflow-x-auto rounded-xl border border-line bg-surface">
         <table className="w-full min-w-[820px] text-sm">
