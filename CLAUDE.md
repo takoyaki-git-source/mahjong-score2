@@ -40,8 +40,8 @@
 
 - project_id: `enurjqgzyerukhbijzea` (region: ap-southeast-2, Postgres 17)
 - URL: https://enurjqgzyerukhbijzea.supabase.co
-- ⚠️ **現状、全テーブルでRLSが無効。まだ本番投入前に必ずRLSを有効化しポリシーを設定すること。**
-- ⚠️ マイグレーション履歴なし(スキーマはSQL Editor等で直接作成されたと思われる)。今後の変更は `supabase/migrations` を作り、CLIまたはMCPの `apply_migration` でマイグレーションとして管理する。
+- **Freeプラン**。「Leaked Password Protection」等、一部のAuth設定はProプラン以上限定で現状は有効化できない
+- RLSは全テーブルで有効化済み(read: public, write: authenticated)。今後のスキーマ変更は`supabase/migrations`にファイルを追加し、MCPの`apply_migration`で適用する(履歴は`list_migrations`で確認可能)
 
 ### 既存テーブルと実際のデータ量
 
@@ -171,7 +171,7 @@
 - [x] 半荘結果の入力画面(`/admin`、`submit_game` RPCを呼ぶ。動作確認済み)
 - [x] 入力画面に素点/ポイントのモード切り替えを追加(`submit_game_points`関数を新規追加)
 - [ ] 2026-08-10分の10半荘をポイントモードで入力(ユーザー作業)
-- [ ] Supabase Authの「Leaked Password Protection」警告への対応(要否含めユーザーに確認)
+- [x] Supabase Authの「Leaked Password Protection」警告 → **Proプラン以上限定機能で現プランでは有効化不可と判明。対応不可のため保留**
 - [ ] 集計期間指定に対応した関数/クエリの設計
 - [ ] スプレッドシートのコピペインポート機能
 - [ ] 成績分析・可視化画面(既存ビュー群を活用)
