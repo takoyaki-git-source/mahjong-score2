@@ -16,6 +16,7 @@
 ## アクセスモデル
 
 - **書き込み(半荘結果の入力・編集)**: 自分(オーナー)のみ。Supabase Authでログインした本人だけが可能。
+  - オーナーアカウント作成済み: `takoyaki0204@gmail.com`(Supabaseダッシュボードから作成、`role: authenticated`)。Next.js側では`supabase.auth.signInWithPassword({ email, password })`でログインする想定
 - **閲覧(成績・分析画面)**: 誰でも閲覧可能。Vercelにデプロイして友人にもURLを共有する想定。
 - → RLSポリシーは「SELECT: 誰でも許可」「INSERT/UPDATE/DELETE: authenticatedロールのみ許可」で設計する。
 
@@ -140,8 +141,8 @@
 - [x] `mahjong_rules` にルール登録(`rule_id=1`のbase_scoreが30000→実データと矛盾していたため25000に修正)
 - [x] `tmp_results`の中身を精査・削除(`results`への変換完了を確認済み)
 - [x] テスト用の半荘データ(`20260509_01`)を削除
+- [x] Supabase Authでオーナー用アカウントを1つ作成(`takoyaki0204@gmail.com`)
 - [ ] 直近(2026-04-30以降)の未取り込みデータがあるか確認
-- [ ] Supabase Authでオーナー用アカウントを1つ作成
 - [ ] 集計期間指定に対応した関数/クエリの設計
 - [ ] Next.jsプロジェクトの初期セットアップ
 - [ ] 半荘結果の入力画面(`submit_game` RPCを呼ぶ)
