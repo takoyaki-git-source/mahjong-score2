@@ -2,6 +2,8 @@
 
 麻雀のスコアを半荘ごとに記録し、様々な指標で成績を分析・可視化するWebアプリ。
 
+**2016年11月〜2026年5月の実データ(858半荘分)が既にSupabaseに入っている。** ゼロからの構築ではなく、既存データ・既存ロジックの上にフロントエンドを構築するプロジェクト。
+
 ## スタック
 
 - **フロントエンド**: Next.js (App Router)
@@ -22,16 +24,18 @@
 - ⚠️ **現状、全テーブルでRLSが無効。まだ本番投入前に必ずRLSを有効化しポリシーを設定すること。**
 - ⚠️ マイグレーション履歴なし(スキーマはSQL Editor等で直接作成されたと思われる)。今後の変更は `supabase/migrations` を作り、CLIまたはMCPの `apply_migration` でマイグレーションとして管理する。
 
-### 既存テーブル(構築途中、データは未投入)
+### 既存テーブルと実際のデータ量
 
-| テーブル | 役割 | 備考 |
-|---|---|---|
-| `players` | 対局者マスタ | `player_id` PK, `name` unique |
-| `mahjong_rules` | ルール設定(ウマ・オカ・トビ賞罰など) | `base_score`(デフォルト30000), `oka`, `uma_1`〜`uma_4`, `tobi_penalty`, `tobi_reward`。**まだ1行も無い** |
-| `games` | 半荘(1ゲーム) | `game_id` は text PK、`YYYYMMDD_連番`形式(例: `20260811_01`)。`rule_id` で `mahjong_rules` を参照。`tobi_by_player_id` / `tobi_target_player_id` でトビの加害/被害を記録 |
-| `results` | 半荘ごとの各プレイヤーの結果 | `rank`, `raw_score`(素点), `final_score`(ウマオカ後の最終スコア、1000点単位), `seat_order`(1〜4の制約あり) |
-| `yakuman_events` | 役満記録 | `yakuman_type`, `player_id`(和了者), `target_player_id`(放銃者など、nullable) |
-| `tmp_results` | インポート用の一時テーブル(FK無し) | **削除予定**。過去データはGoogleスプレッドシートからのコピペインポート機能で取り込み直す |
+⚠️ **Supabase MCPの`list_tables`が返す行数は不正確な推定値(reltuples由来)で、当初は全テーブル0件と表示されていたが実際は下記の通り大量のデータが入っていた。** 今後もテーブルの行数を確認する際は`count(*)`で直接数えること。
+
+| テーブル | 役割 | 実際の行数 | 備考 |
+|---|---|---|---|
+| `players` | 対局者マスタ | 26 | `player_id` PK, `name` unique |
+| `mahjong_rules` | ルール設定(ウマ・オカ・トビ賞罰など) | 1 | `rule_id=1`("kurakuen_4p"): 開始点25000, オカ+20, ウマ+10/+5/-5/-10, トビ+10/-10 |
+| `games` | 半荘(1ゲーム) | 858 | `game_id` は text PK、`YYYYMMDD_連番`形式(例: `20260811_01`)。全件`rule_id=1`。`played_at`は2016-11-05〜2026-05-09。`tobi_by_player_id` / `tobi_target_player_id` でトビの加害/被害を記録 |
+| `results` | 半荘ごとの各プレイヤーの結果 | 3432 | 858×4と一致。`rank`, `raw_score`(素点、平均ちょうど25000), `final_score`(ウマオカ後の最終スコア、1000点単位), `seat_order`(1〜4の制約あり) |
+| `yakuman_events` | 役満記録 | 19 | `yakuman_type`, `player_id`(和了者), `target_player_id`(放銃者など、nullable) |
+| `tmp_results` | FK無しの一時テーブル | 3428 | `results`とほぼ同数。**過去データをGoogleスプレッドシートからインポートした際のステージング/バックアップだった可能性が高い。中身を精査するまで削除しない** |
 
 ### 既存の関数(書き込みロジック、構築済み)
 
@@ -39,7 +43,7 @@
 
 - **`generate_game_id(p_date date) → text`**: その日の`games`の件数を見て`YYYYMMDD_連番`形式のgame_idを発行
 - **`submit_game(p_played_at, p_player1..4, p_score1..4, p_seat1..4, p_tobi_target, p_tobi_by) → text`**: 半荘結果をまとめて登録するRPC。
-  - `mahjong_rules`から`rule_id = 1`のルールを固定で参照(⚠️ まだルール行が無いので現状は失敗する)
+  - `mahjong_rules`から`rule_id = 1`のルールを固定で参照(設定済み)
   - `generate_game_id`でgame_id発行 → `games`にINSERT
   - 素点(`raw_score`)の降順・同点は`seat_order`昇順で着順(`rank`)を自動算出
   - `final_score = (raw_score - base_score) / 1000 + ウマ(+1位はオカも) + トビ賞罰` を算出して`results`にINSERT
@@ -70,7 +74,9 @@
 
 ## 過去データの取り込み
 
-過去の成績はGoogleスプレッドシートで管理していた。スプレッドシートの範囲をコピーしてテキストエリアに貼り付けるとタブ区切り(TSV)になるため、貼り付け→パース→プレビュー確認→`players`/`games`/`results`へのINSERT、という管理者専用のインポート機能を作る。
+過去の成績はGoogleスプレッドシートで管理していた。既に2016-11-05〜2026-05-09分の858半荘はSupabaseに取り込み済み。**最終対局日(2026-05-09)以降、直近数ヶ月分がまだ未取り込みの可能性がある**(要確認)。
+
+スプレッドシートの範囲をコピーしてテキストエリアに貼り付けるとタブ区切り(TSV)になるため、貼り付け→パース→プレビュー確認→`submit_game`呼び出し、という管理者専用のインポート機能を作る(継続的な追加取り込みにも使える)。
 
 ## 分析したい指標
 
@@ -122,10 +128,11 @@
 ## 現在のTODO
 
 - [x] RLSの有効化とポリシー設定(read: public, write: authenticated)
-- [ ] `tmp_results` テーブルの削除
-- [ ] Supabase Authでオーナー用アカウントを1つ作成
 - [x] ビューのSECURITY DEFINER/関数のsearch_path警告への対応
-- [ ] `mahjong_rules` に自分たちのグループのルール(ウマ・オカ等)を1行登録(`submit_game`が`rule_id=1`固定なので必須)
+- [x] `mahjong_rules` にルール登録(`rule_id=1`のbase_scoreが30000→実データと矛盾していたため25000に修正)
+- [ ] `tmp_results`の中身を精査(`results`との差分・重複を確認してから削除判断)
+- [ ] 直近(2026-05-09以降)の未取り込みデータがあるか確認
+- [ ] Supabase Authでオーナー用アカウントを1つ作成
 - [ ] 集計期間指定に対応した関数/クエリの設計
 - [ ] Next.jsプロジェクトの初期セットアップ
 - [ ] 半荘結果の入力画面(`submit_game` RPCを呼ぶ)
