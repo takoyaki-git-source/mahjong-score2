@@ -4,7 +4,6 @@ import type { PeriodParams } from '@/lib/period'
 const PRESETS = [
   { key: 'all', label: '全期間' },
   { key: '1y', label: '直近1年' },
-  { key: '3m', label: '直近3ヶ月' },
   { key: 'ytd', label: '今年' },
 ] as const
 

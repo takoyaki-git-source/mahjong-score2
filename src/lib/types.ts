@@ -29,6 +29,7 @@ export type PlayerStats = {
   max_last_streak: number
   max_no_top_streak: number
   max_no_last_streak: number
+  last_played: string
 }
 
 export type MatchupStats = {

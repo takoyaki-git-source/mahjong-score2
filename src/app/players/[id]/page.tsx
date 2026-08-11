@@ -82,6 +82,7 @@ export default async function PlayerPage({
               ['トビ率', pct(stats.tobi_rate)],
               ['最高pt', pt(stats.max_score)],
               ['最低pt', pt(stats.min_score)],
+              ['最終対局日', stats.last_played],
             ].map(([label, value]) => (
               <div
                 key={label as string}

@@ -15,10 +15,6 @@ export function resolvePeriod(sp: PeriodParams): ResolvedPeriod {
     start.setFullYear(start.getFullYear() - 1)
     return { start: toISODate(start), end: toISODate(end), label: '直近1年' }
   }
-  if (period === '3m') {
-    start.setMonth(start.getMonth() - 3)
-    return { start: toISODate(start), end: toISODate(end), label: '直近3ヶ月' }
-  }
   if (period === 'ytd') {
     start.setMonth(0, 1)
     return { start: toISODate(start), end: toISODate(end), label: '今年' }

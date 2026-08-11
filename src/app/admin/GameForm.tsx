@@ -8,8 +8,27 @@ type Player = { player_id: number; name: string }
 type Rule = { rule_id: number; rule_name: string }
 type Mode = 'raw' | 'points'
 type PreviewRow = { player_id: number; rank: number; final_score: number }
+type YakumanEntry = { playerId: string; type: string; targetId: string }
 
 const SEAT_COUNT = 4
+
+const YAKUMAN_SUGGESTIONS = [
+  '国士無双',
+  '国士無双十三面待ち',
+  '四暗刻',
+  '四暗刻単騎',
+  '大三元',
+  '小四喜',
+  '大四喜',
+  '字一色',
+  '清老頭',
+  '緑一色',
+  '九蓮宝燈',
+  '純正九蓮宝燈',
+  '四槓子',
+  '天和',
+  '地和',
+]
 
 function todayLocalISODate() {
   const now = new Date()
@@ -27,6 +46,7 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
     Array.from({ length: SEAT_COUNT }, () => ({ playerId: '', value: '' }))
   )
   const [tobiBy, setTobiBy] = useState('')
+  const [yakumanEntries, setYakumanEntries] = useState<YakumanEntry[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastGameId, setLastGameId] = useState<string | null>(null)
@@ -46,6 +66,18 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
     setMode(next)
     setError(null)
     setPreview(null)
+  }
+
+  function addYakumanEntry() {
+    setYakumanEntries((prev) => [...prev, { playerId: '', type: '', targetId: '' }])
+  }
+
+  function updateYakumanEntry(i: number, patch: Partial<YakumanEntry>) {
+    setYakumanEntries((prev) => prev.map((y, idx) => (idx === i ? { ...y, ...patch } : y)))
+  }
+
+  function removeYakumanEntry(i: number) {
+    setYakumanEntries((prev) => prev.filter((_, idx) => idx !== i))
   }
 
   // 素点モードのみ: 入力が揃ったら compute_game_results をデバウンス呼び出しして
@@ -106,6 +138,18 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
       setError(mode === 'raw' ? '4人分の点数を入力してください' : '4人分のポイントを入力してください')
       return
     }
+    if (yakumanEntries.some((y) => (y.playerId && !y.type.trim()) || (!y.playerId && y.type.trim()))) {
+      setError('役満は和了者と役満名の両方を入力してください')
+      return
+    }
+
+    const yakumanPayload = yakumanEntries
+      .filter((y) => y.playerId && y.type.trim())
+      .map((y) => ({
+        player_id: Number(y.playerId),
+        yakuman_type: y.type.trim(),
+        target_player_id: y.targetId ? Number(y.targetId) : null,
+      }))
 
     setSubmitting(true)
     const supabase = createClient()
@@ -128,6 +172,7 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
       p_seat4: 4,
       p_tobi_target: null,
       p_tobi_by: tobiBy ? Number(tobiBy) : null,
+      p_yakuman: yakumanPayload,
     })
     setSubmitting(false)
 
@@ -139,6 +184,7 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
     setLastGameId(data as string)
     setRows(Array.from({ length: SEAT_COUNT }, () => ({ playerId: '', value: '' })))
     setTobiBy('')
+    setYakumanEntries([])
     setPreview(null)
     router.refresh()
   }
@@ -314,6 +360,83 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
               </option>
             ))}
         </select>
+      </div>
+
+      <div>
+        <span className="mb-1 block text-sm font-medium">役満(任意)</span>
+        <datalist id="yakuman_suggestions">
+          {YAKUMAN_SUGGESTIONS.map((y) => (
+            <option key={y} value={y} />
+          ))}
+        </datalist>
+        <div className="space-y-3">
+          {yakumanEntries.map((entry, i) => (
+            <div key={i} className="flex items-end gap-2 rounded-md border border-black/10 p-2 dark:border-white/15">
+              <div className="flex-1">
+                <label className="mb-1 block text-xs text-black/60 dark:text-white/60">和了者</label>
+                <select
+                  value={entry.playerId}
+                  onChange={(e) => updateYakumanEntry(i, { playerId: e.target.value })}
+                  className={inputClass}
+                >
+                  <option value="">選択</option>
+                  {players
+                    .filter((p) => selectedPlayerIds.includes(String(p.player_id)))
+                    .map((p) => (
+                      <option key={p.player_id} value={p.player_id}>
+                        {p.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div className="flex-1">
+                <label className="mb-1 block text-xs text-black/60 dark:text-white/60">役満</label>
+                <input
+                  type="text"
+                  list="yakuman_suggestions"
+                  value={entry.type}
+                  onChange={(e) => updateYakumanEntry(i, { type: e.target.value })}
+                  className={inputClass}
+                />
+              </div>
+              <div className="flex-1">
+                <label className="mb-1 block text-xs text-black/60 dark:text-white/60">放銃者(任意)</label>
+                <select
+                  value={entry.targetId}
+                  onChange={(e) => updateYakumanEntry(i, { targetId: e.target.value })}
+                  className={inputClass}
+                >
+                  <option value="">ツモ</option>
+                  {players
+                    .filter(
+                      (p) =>
+                        selectedPlayerIds.includes(String(p.player_id)) &&
+                        String(p.player_id) !== entry.playerId
+                    )
+                    .map((p) => (
+                      <option key={p.player_id} value={p.player_id}>
+                        {p.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                onClick={() => removeYakumanEntry(i)}
+                className="shrink-0 rounded-md border border-black/15 px-2 py-2 text-xs dark:border-white/20"
+              >
+                削除
+              </button>
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={addYakumanEntry}
+          className="mt-2 rounded-md border border-black/15 px-3 py-1.5 text-sm dark:border-white/20"
+        >
+          + 役満を追加
+        </button>
       </div>
 
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}

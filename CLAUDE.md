@@ -31,13 +31,14 @@
 
 ### 実装済みページ
 
-- `src/app/page.tsx`(トップページ、`/`): 成績一覧。`PeriodSelector`で期間指定(全期間/直近1年/直近3ヶ月/今年/カスタム)し、`player_stats_for_period` RPCの結果を総ポイント順のテーブルで表示。名前から`/players/[id]`にリンク
-- `src/app/players/[id]/page.tsx`: プレイヤー個人の詳細ページ。基本集計・連続記録・日別集計・役満・対戦相手別成績(`matchup_stats_for_period`)を表示。同じ`PeriodSelector`で期間指定可能
+- `src/app/page.tsx`(トップページ、`/`): 成績一覧。`PeriodSelector`で期間指定(全期間/直近1年/今年/カスタム。直近3ヶ月はユーザー希望で削除)し、`player_stats_for_period` RPCの結果を`Leaderboard`コンポーネントで表示
+- `src/components/Leaderboard.tsx`: 成績一覧テーブル(Client Component)。列見出しクリックでソート(トグルで昇順/降順)、列ごとにベスト(緑)/ワースト(赤)をハイライト(半荘数・名前・最終対局日は対象外)。「最低半荘数」フィルタで少数対局のプレイヤーを除外可能(ベストワースト判定にも反映される)。「最終対局日」列あり
+- `src/app/players/[id]/page.tsx`: プレイヤー個人の詳細ページ。基本集計(最終対局日含む)・連続記録・日別集計・役満・対戦相手別成績(`matchup_stats_for_period`)を表示。同じ`PeriodSelector`で期間指定可能
 - `src/components/PeriodSelector.tsx` / `src/lib/period.ts`: 期間指定UI(共通コンポーネント)。プリセットはリンク、カスタム期間は`<input type="date">`を使ったGETフォーム(JS不要)。`globals.css`に`color-scheme: light`/`dark`を設定していないとダークモード時にブラウザ標準のカレンダーアイコンが背景に同化して見えなくなる不具合があったため設定済み
 - `src/lib/types.ts`: Supabase未生成型(Database型)の代わりに、RPCの戻り値を手動で型定義(`PlayerStats`/`MatchupStats`/`PlayerYakumanStats`)。`supabase-js`の`.returns<T>()`はDatabase型generic無しだと型エラーになるため、`await`後に`as T[]`でキャストする方式を採用
 - `src/app/admin/login/page.tsx`: ログインフォーム(Client Component、`supabase.auth.signInWithPassword`)
 - `src/app/admin/page.tsx`: 半荘入力画面(Server Componentで`players`/`mahjong_rules`/`player_recent_year_games`/`player_base_stats`を取得し`GameForm`に渡す)。プレイヤーの並び順は「直近1年の参加数→累計参加数→五十音順(`Intl.Collator('ja')`による近似。読み仮名列が無いため完全な五十音順ではない)」
-- `src/app/admin/GameForm.tsx`: 入力フォーム本体(Client Component)。「素点(自動計算)」/「ポイント(計算済み)」のモード切り替え、対局日、**適用ルール選択**、4人分のプレイヤー選択と点数(またはポイント)、トビ加害(任意、1人まで)を入力。素点モードは`submit_game`、ポイントモードは`submit_game_points`を呼ぶ。素点モードのみ入力が揃うと`compute_game_results`をデバウンス呼び出しして登録前にプレビュー表示。合計点数チェック(素点は100,000、ポイントは0からのズレを警告)。実機で動作確認済み
+- `src/app/admin/GameForm.tsx`: 入力フォーム本体(Client Component)。「素点(自動計算)」/「ポイント(計算済み)」のモード切り替え、対局日、**適用ルール選択**、4人分のプレイヤー選択と点数(またはポイント)、トビ加害(任意、1人まで)、**役満(任意、複数追加可・和了者/役満名/放銃者)**を入力。素点モードは`submit_game`、ポイントモードは`submit_game_points`を呼ぶ(どちらも`p_yakuman`にjsonb配列で渡し、半荘・結果・役満を同一トランザクションで登録)。素点モードのみ入力が揃うと`compute_game_results`をデバウンス呼び出しして登録前にプレビュー表示。合計点数チェック(素点は100,000、ポイントは0からのズレを警告)。実機で動作確認済み
 - `src/app/admin/LogoutButton.tsx`: ログアウトボタン
 - `src/app/admin/settings/page.tsx`: 設定画面。プレイヤー管理とルール管理を表示
 - `src/app/admin/settings/PlayerManager.tsx`: プレイヤー一覧表示+新規追加フォーム
@@ -73,12 +74,14 @@
   - 着順(`rank`)は素点降順・同点は`seat_order`昇順
   - `final_score = (raw_score - base_score) / 1000 + ウマ[順位] - オカ/4 + (1位のみ+オカ全額) + トビ賞罰`
   - ⚠️ **オカの計算に一度バグがあった**: 当初は1位に+オカを足すだけで誰からも引いていなかったため、半荘ごとに合計が+オカ分だけ増えてゼロサムになっていなかった(過去データは合計0のはずなのに矛盾)。「全員から一律オカ/4を引き、1位にオカ全額を足す」に修正しゼロサムになることを確認済み
-- **`submit_game(p_played_at, p_rule_id, p_player1..4, p_score1..4, p_seat1..4, p_tobi_target, p_tobi_by) → text`**: 半荘結果をまとめて登録するRPC。`generate_game_id`でgame_id発行→`games`にINSERT→`compute_game_results`の結果を`results`にINSERT。
+- **`submit_game(p_played_at, p_rule_id, p_player1..4, p_score1..4, p_seat1..4, p_tobi_target, p_tobi_by, p_yakuman) → text`**: 半荘結果をまとめて登録するRPC。`generate_game_id`でgame_id発行→`games`にINSERT→`compute_game_results`の結果を`results`にINSERT→`p_yakuman`があれば`yakuman_events`にもINSERT。
   - **設計意図**: 新アプリでは半荘終了時の素点(そのままの点数)を入力するだけで、ウマ・オカ・トビの計算は自動で行う。旧スプレッドシートはウマオカトビ計算後の最終ポイントしか記録していなかった(`raw_score`が過去データ全件NULLなのはこのため)ので、これは運用上の改善にあたる
   - `p_rule_id`はハードコードではなくパラメータ化済み(複数ルールを切り替えて使える)
-- **`submit_game_points(p_played_at, p_rule_id, p_player1..4, p_points1..4, p_seat1..4, p_tobi_target, p_tobi_by) → text`**: `submit_game`と対になる、ポイント直接入力用のRPC。
+  - `p_yakuman`: `[{"player_id": int, "yakuman_type": text, "target_player_id": int|null}, ...]`形式のjsonb配列(デフォルト`[]`)。半荘・結果・役満をまとめて1回のRPC呼び出しでアトミックに登録できる
+- **`submit_game_points(p_played_at, p_rule_id, p_player1..4, p_points1..4, p_seat1..4, p_tobi_target, p_tobi_by, p_yakuman) → text`**: `submit_game`と対になる、ポイント直接入力用のRPC。
   - ウマ・オカ・トビの自動計算はしない。`final_score`にポイントをそのまま入れ、`raw_score`はNULL(過去データと同じ形)
   - `rank`はポイント降順・同点は`seat_order`昇順で自動算出
+  - `p_yakuman`は`submit_game`と同じ形式
   - 用途: 2026-08-10分など「ウマオカトビ計算済みのポイントしか手元にない」半荘を記録する場合
 
 ⚠️ **既存のPL/pgSQL関数を書き換える際の注意**: `CREATE OR REPLACE FUNCTION`は引数リストが変わると新しいオーバーロードを追加するだけで古い方が残ってしまう。引数を追加/変更する場合は先に`DROP FUNCTION`すること。また関数本体内のSQL文(INSERT列数など)はCREATE時に検証されず、実際に呼び出すまでエラーに気づけない(過去に列数不一致のバグを一度作り込んだ)。関数を変更したら**必ず実際に呼び出してテストし、テストデータは削除すること**。
@@ -102,7 +105,7 @@
 
 上記ビューは全期間集計固定なので、`p_start`/`p_end`(どちらもNULL可、NULL/NULLで全期間)を受け取るSQL関数を別途追加した。フロントの成績一覧・個人詳細ページはこちらを使う。
 
-- **`player_stats_for_period(p_start, p_end)`**: `player_stats_full`ビュー相当を期間指定対応にしたもの。基本集計・着順系・日別集計系・連続記録系を全部含む
+- **`player_stats_for_period(p_start, p_end)`**: `player_stats_full`ビュー相当を期間指定対応にしたもの。基本集計・着順系・日別集計系・連続記録系に加え`last_played`(期間内の最終対局日)も含む
 - **`matchup_stats_for_period(p_start, p_end)`**: `matchup_stats`ビュー相当
 - **`player_yakuman_stats_for_period(p_start, p_end)`**: `player_yakuman_stats`ビュー相当
 
@@ -197,6 +200,12 @@
 - [x] `/admin`のプレイヤー選択プルダウンを直近1年参加数→累計参加数→五十音順(近似)でソート
 - [x] 集計期間指定に対応した関数/クエリの設計(`player_stats_for_period` / `matchup_stats_for_period` / `player_yakuman_stats_for_period`)
 - [x] 成績分析・可視化画面(トップページ=成績一覧、`/players/[id]`=個人詳細。期間指定UI付き)
+- [x] 入力フォームに役満の入力欄を追加(`submit_game`/`submit_game_points`に`p_yakuman`パラメータを追加)
+- [x] 成績一覧に列ごとのベスト/ワーストハイライトを追加
+- [x] 成績一覧の列見出しクリックでソート
+- [x] 成績一覧に最低半荘数フィルタを追加(極端に少ない対局数がベストワーストに影響しないように)
+- [x] 「直近3ヶ月」プリセットを削除
+- [x] 成績一覧・個人詳細に「最終対局日」を追加
 - [ ] スプレッドシートのコピペインポート機能
 - [ ] Vercelデプロイ設定
 
