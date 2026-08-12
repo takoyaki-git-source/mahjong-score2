@@ -17,7 +17,7 @@ export default function PeriodSelector({
   years?: number[]
 }) {
   const isCustom = Boolean(current.start || current.end)
-  const activePeriod = isCustom ? null : (current.period ?? 'all')
+  const activePeriod = isCustom ? null : (current.period ?? 'ytd')
 
   const pillClass = (active: boolean) =>
     `rounded-full px-3.5 py-1.5 text-sm transition-colors ${

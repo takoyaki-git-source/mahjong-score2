@@ -8,7 +8,6 @@ import TileBadge from './TileBadge'
 type ColumnKey =
   | 'name'
   | 'games'
-  | 'total_score'
   | 'avg_score'
   | 'avg_rank'
   | 'first_rate'
@@ -41,7 +40,6 @@ const jaCollator = new Intl.Collator('ja')
 const COLUMNS: Column[] = [
   { key: 'name', label: '名前', dir: 'neutral', align: 'left', format: (s) => s.name },
   { key: 'games', label: '半荘数', dir: 'neutral', format: (s) => String(s.games) },
-  { key: 'total_score', label: '総pt', dir: 'higher', format: (s) => pt(s.total_score) },
   { key: 'avg_score', label: '平均pt', dir: 'higher', format: (s) => pt(s.avg_score) },
   { key: 'avg_rank', label: '平均着順', dir: 'lower', format: (s) => String(s.avg_rank) },
   { key: 'first_rate', label: '1位率', dir: 'higher', format: (s) => pct(s.first_rate) },
@@ -57,8 +55,6 @@ function valueOf(s: PlayerStats, key: ColumnKey): number | string | null {
       return s.name
     case 'games':
       return s.games
-    case 'total_score':
-      return s.total_score
     case 'avg_score':
       return s.avg_score
     case 'avg_rank':
@@ -76,8 +72,14 @@ function valueOf(s: PlayerStats, key: ColumnKey): number | string | null {
   }
 }
 
-export default function Leaderboard({ stats }: { stats: PlayerStats[] }) {
-  const [sortKey, setSortKey] = useState<ColumnKey>('total_score')
+export default function Leaderboard({
+  stats,
+  requireMinPlayDays = true,
+}: {
+  stats: PlayerStats[]
+  requireMinPlayDays?: boolean
+}) {
+  const [sortKey, setSortKey] = useState<ColumnKey>('avg_score')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [applyCutoffToTable, setApplyCutoffToTable] = useState(false)
 
@@ -91,8 +93,10 @@ export default function Leaderboard({ stats }: { stats: PlayerStats[] }) {
     setSortDir(key === 'name' || col?.dir === 'lower' ? 'asc' : 'desc')
   }
 
-  // 足切り基準: 対局数が極端に少ない・参加日数が1日だけだと運の影響が大きく出やすいので、
-  // 「その期間の参加者の半荘数の中央値の半分未満(最低5半荘)」または「参加2日未満」の人を除外する。
+  // 足切り基準: 対局数が極端に少ないと運の影響が大きく出やすいので、
+  // 「参加者の半荘数の中央値の半分未満(最低5半荘)」の人を除外する。
+  // 期間指定モードでは、さらに「参加2日未満」の人も除外する(直近N半荘モードは
+  // 1日にまとめて何十半荘も打つ運用のため、参加日数はこのモードでは意味を持たない)。
   // 除外した結果0人になる場合は全員にフォールバックする。ヒーロー(上位3人)は常にこの基準を使う。
   const { threshold, eligible } = useMemo(() => {
     if (stats.length === 0) return { threshold: 0, eligible: [] as PlayerStats[] }
@@ -101,9 +105,9 @@ export default function Leaderboard({ stats }: { stats: PlayerStats[] }) {
     const median =
       gamesSorted.length % 2 === 0 ? (gamesSorted[mid - 1] + gamesSorted[mid]) / 2 : gamesSorted[mid]
     const t = Math.max(5, Math.ceil(median / 2))
-    const filtered = stats.filter((s) => s.games >= t && s.play_days >= MIN_PLAY_DAYS)
+    const filtered = stats.filter((s) => s.games >= t && (!requireMinPlayDays || s.play_days >= MIN_PLAY_DAYS))
     return { threshold: t, eligible: filtered.length > 0 ? filtered : stats }
-  }, [stats])
+  }, [stats, requireMinPlayDays])
 
   const podium = useMemo(
     () => [...eligible].sort((a, b) => b.avg_score - a.avg_score).slice(0, 3),
@@ -111,6 +115,8 @@ export default function Leaderboard({ stats }: { stats: PlayerStats[] }) {
   )
 
   const visibleStats = applyCutoffToTable ? eligible : stats
+
+  const cutoffLabel = `${threshold}半荘以上${requireMinPlayDays ? `・参加${MIN_PLAY_DAYS}日以上` : ''}`
 
   const sorted = useMemo(() => {
     const copy = [...visibleStats]
@@ -180,7 +186,7 @@ export default function Leaderboard({ stats }: { stats: PlayerStats[] }) {
             ))}
           </div>
           <p className="mt-2 text-xs text-foreground-soft">
-            平均pt上位。足切り: {threshold}半荘以上・参加{MIN_PLAY_DAYS}日以上
+            平均pt上位。足切り: {cutoffLabel}
           </p>
         </div>
       )}
@@ -192,7 +198,7 @@ export default function Leaderboard({ stats }: { stats: PlayerStats[] }) {
           onChange={(e) => setApplyCutoffToTable(e.target.checked)}
           className="accent-accent"
         />
-        下の表とハイライトにも足切り({threshold}半荘以上・参加{MIN_PLAY_DAYS}日以上)を適用する
+        下の表とハイライトにも足切り({cutoffLabel})を適用する
       </label>
 
       <div className="overflow-x-auto rounded-xl border border-line bg-surface">

@@ -7,7 +7,7 @@ export function resolvePeriod(sp: PeriodParams): ResolvedPeriod {
     return { start: sp.start ?? null, end: sp.end ?? null, label: 'カスタム期間' }
   }
 
-  const period = sp.period ?? 'all'
+  const period = sp.period ?? 'ytd'
   const end = new Date()
   const start = new Date(end)
 
