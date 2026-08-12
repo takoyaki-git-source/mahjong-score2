@@ -7,8 +7,12 @@ export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // サイト全体の合言葉ゲート。SITE_PASSWORD未設定なら無効(ローカル開発などでは気にせず使える)。
+  // /manifest.webmanifest と /sw.js はPWAのインストール判定でブラウザが未認証状態でも
+  // 取得する必要があるため除外(ゲートに引っかかるとJSONの代わりに/enterへのリダイレクトが
+  // 返り、ブラウザがマニフェスト/Service Workerを正しく認識できずインストール不可になる)。
   const sitePassword = process.env.SITE_PASSWORD
-  if (sitePassword && pathname !== '/enter') {
+  const gateExempt = pathname === '/enter' || pathname === '/manifest.webmanifest' || pathname === '/sw.js'
+  if (sitePassword && !gateExempt) {
     const authed = request.cookies.get(SITE_AUTH_COOKIE)?.value === sitePassword
     if (!authed) {
       const url = request.nextUrl.clone()

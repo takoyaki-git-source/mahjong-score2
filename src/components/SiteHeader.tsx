@@ -20,6 +20,9 @@ export default function SiteHeader({ active }: { active?: 'leaderboard' | 'daily
           <Link href="/yakuman" className={linkClass(active === 'yakuman')}>
             役満記録
           </Link>
+          <Link href="/admin" className="text-foreground-soft hover:text-foreground">
+            入力
+          </Link>
         </nav>
       </div>
     </header>
