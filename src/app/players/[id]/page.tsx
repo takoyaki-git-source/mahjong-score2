@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { resolvePeriod, type PeriodParams } from '@/lib/period'
 import { dateOnly } from '@/lib/format'
-import type { PlayerStats, MatchupStats, PlayerYakumanStats } from '@/lib/types'
+import type { PlayerStats, MatchupStats, PlayerYakumanStats, PlayerRatingHistoryPoint } from '@/lib/types'
 import SiteHeader from '@/components/SiteHeader'
 import PeriodSelector from '@/components/PeriodSelector'
 import TrendChart from '@/components/TrendChart'
@@ -111,6 +111,7 @@ export default async function PlayerPage({
     { data: yakumanDetailData },
     { data: yearRows },
     { data: resultRowsData },
+    { data: ratingHistoryData },
   ] = await Promise.all([
     supabase.rpc('player_stats_for_period', { p_start: start, p_end: end }).eq('player_id', playerId),
     supabase
@@ -131,6 +132,8 @@ export default async function PlayerPage({
       .eq('player_id', playerId),
     supabase.rpc('available_years'),
     supabase.from('results').select('final_score, rank, game:games(played_at)').eq('player_id', playerId),
+    // レーティングは常に全期間・全対局を通した逐次計算値のため、この画面の期間指定(start/end)は適用しない。
+    supabase.rpc('player_rating_history').eq('player_id', playerId).order('game_id', { ascending: true }),
   ])
 
   const statsRows = (statsData ?? []) as PlayerStats[]
@@ -139,6 +142,13 @@ export default async function PlayerPage({
   const years = (yearRows ?? []).map((r: { year: number }) => r.year)
   const stats = statsRows[0]
   const yakuman = yakumanRows[0]
+
+  const ratingHistory = (ratingHistoryData ?? []) as PlayerRatingHistoryPoint[]
+  const ratingSeries = ratingHistory.map((r) => ({
+    date: r.played_at.slice(0, 10),
+    value: Math.round(r.rating_after * 10) / 10,
+  }))
+  const currentRating = ratingHistory.length > 0 ? ratingHistory[ratingHistory.length - 1].rating_after : null
 
   const yakumanDetails = ((yakumanDetailData ?? []) as unknown as YakumanDetail[])
     .filter((y) => {
@@ -227,6 +237,23 @@ export default async function PlayerPage({
         </p>
 
         <PeriodSelector basePath={`/players/${playerId}`} current={sp} years={years} />
+
+        {currentRating != null && (
+          <section className="mb-10">
+            <h2 className="mb-3 font-display text-lg font-bold">Rating</h2>
+            <p className="mb-3 text-xs text-foreground-soft">
+              天鳳風レーティング(段位戦)。期間指定の影響を受けず、全対局を通した現在値です。
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <StatCard
+                label="現在のRating"
+                value={Math.round(currentRating)}
+                caption={`全${ratingHistory.length}戦`}
+              />
+              <TrendChart title="レーティング推移(全期間)" data={ratingSeries} color="var(--gold)" format="rating" />
+            </div>
+          </section>
+        )}
 
         {!stats ? (
           <p className="text-sm text-foreground-soft">この期間の対局データはありません。</p>

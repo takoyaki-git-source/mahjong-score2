@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { resolvePeriod, type PeriodParams } from '@/lib/period'
-import type { PlayerStats } from '@/lib/types'
+import type { PlayerRating, PlayerStats } from '@/lib/types'
 import SiteHeader from '@/components/SiteHeader'
 import PeriodSelector from '@/components/PeriodSelector'
 import LastNSelector from '@/components/LastNSelector'
@@ -15,13 +15,18 @@ export default async function Home({ searchParams }: { searchParams: Promise<Hom
   const period = lastN ? null : resolvePeriod(sp)
 
   const supabase = await createClient()
-  const [{ data, error }, { data: yearRows }] = await Promise.all([
+  const [{ data, error }, { data: yearRows }, { data: ratingRows }] = await Promise.all([
     lastN
       ? supabase.rpc('player_stats_for_last_n', { p_n: lastN })
       : supabase.rpc('player_stats_for_period', { p_start: period!.start, p_end: period!.end }),
     supabase.rpc('available_years'),
+    supabase.rpc('player_current_ratings'),
   ])
-  const stats = (data ?? []) as PlayerStats[]
+  const ratingByPlayer = new Map((((ratingRows ?? []) as PlayerRating[])).map((r) => [r.player_id, r.rating]))
+  const stats = ((data ?? []) as PlayerStats[]).map((s) => ({
+    ...s,
+    rating: ratingByPlayer.get(s.player_id) ?? null,
+  }))
   const years = (yearRows ?? []).map((r: { year: number }) => r.year)
 
   const label = lastN ? `直近${lastN}半荘` : period!.label

@@ -30,6 +30,29 @@ export type PlayerStats = {
   max_no_top_streak: number
   max_no_last_streak: number
   last_played: string
+  // 常に全期間・全対局で逐次計算される天鳳風レーティング(期間/直近N半荘フィルタの影響を受けない)。
+  // Leaderboardコンポーネント側でplayer_current_ratingsの結果をマージして埋める。
+  rating?: number | null
+}
+
+export type PlayerRating = {
+  player_id: number
+  name: string
+  rating: number
+  games: number
+}
+
+export type PlayerRatingHistoryPoint = {
+  player_id: number
+  name: string
+  game_id: string
+  played_at: string
+  rank: number
+  games_before: number
+  rating_before: number
+  table_avg_rating: number
+  delta: number
+  rating_after: number
 }
 
 export type MatchupStats = {

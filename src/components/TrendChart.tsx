@@ -12,7 +12,7 @@ type Props = {
   data: Point[]
   color: string
   higherIsBetter?: boolean
-  format?: 'pt' | 'rank'
+  format?: 'pt' | 'rank' | 'rating'
   monthly?: boolean
 }
 
@@ -20,8 +20,9 @@ const WIDTH = 600
 const HEIGHT = 200
 const PAD = { top: 16, right: 12, bottom: 24, left: 44 }
 
-function formatValue(v: number, format: 'pt' | 'rank') {
+function formatValue(v: number, format: 'pt' | 'rank' | 'rating') {
   if (format === 'rank') return v.toFixed(2)
+  if (format === 'rating') return String(Math.round(v))
   const rounded = Math.round(v * 10) / 10
   return `${rounded > 0 ? '+' : ''}${rounded}`
 }

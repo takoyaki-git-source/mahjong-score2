@@ -8,6 +8,7 @@ import TileBadge from './TileBadge'
 type ColumnKey =
   | 'name'
   | 'games'
+  | 'rating'
   | 'avg_score'
   | 'avg_rank'
   | 'first_rate'
@@ -35,11 +36,16 @@ function pt(v: number | null) {
   return `${v > 0 ? '+' : ''}${v}`
 }
 
+function rating(v: number | null | undefined) {
+  return v == null ? '-' : String(Math.round(v))
+}
+
 const jaCollator = new Intl.Collator('ja')
 
 const COLUMNS: Column[] = [
   { key: 'name', label: '名前', dir: 'neutral', align: 'left', format: (s) => s.name },
   { key: 'games', label: '半荘数', dir: 'neutral', format: (s) => String(s.games) },
+  { key: 'rating', label: 'Rating', dir: 'higher', format: (s) => rating(s.rating) },
   { key: 'avg_score', label: '平均pt', dir: 'higher', format: (s) => pt(s.avg_score) },
   { key: 'avg_rank', label: '平均着順', dir: 'lower', format: (s) => String(s.avg_rank) },
   { key: 'first_rate', label: '1位率', dir: 'higher', format: (s) => pct(s.first_rate) },
@@ -55,6 +61,8 @@ function valueOf(s: PlayerStats, key: ColumnKey): number | string | null {
       return s.name
     case 'games':
       return s.games
+    case 'rating':
+      return s.rating ?? null
     case 'avg_score':
       return s.avg_score
     case 'avg_rank':
