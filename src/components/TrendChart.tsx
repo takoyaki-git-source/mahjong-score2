@@ -14,6 +14,9 @@ type Props = {
   higherIsBetter?: boolean
   format?: 'pt' | 'rank' | 'rating'
   monthly?: boolean
+  // 'date': 実際の日付間隔で配置(1日に何半荘打っても同じx座標に重なる)。
+  // 'sequence': データ点を等間隔に配置(1半荘ごとに1目盛り)。
+  xMode?: 'date' | 'sequence'
 }
 
 const WIDTH = 600
@@ -38,6 +41,7 @@ export default function TrendChart({
   higherIsBetter = true,
   format = 'pt',
   monthly = false,
+  xMode = 'date',
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [hoverIdx, setHoverIdx] = useState<number | null>(null)
@@ -63,8 +67,11 @@ export default function TrendChart({
   const maxV = Math.max(...values)
   const vRange = maxV - minV || 1
 
-  function xFor(ts: number) {
+  function xForDate(ts: number) {
     return PAD.left + (maxTs === minTs ? innerW / 2 : ((ts - minTs) / (maxTs - minTs)) * innerW)
+  }
+  function xForIndex(i: number) {
+    return PAD.left + (data.length <= 1 ? innerW / 2 : (i / (data.length - 1)) * innerW)
   }
   function yFor(v: number) {
     const frac = (v - minV) / vRange
@@ -72,7 +79,11 @@ export default function TrendChart({
     return PAD.top + flipped * innerH
   }
 
-  const points = data.map((p) => ({ x: xFor(toTs(p.date)), y: yFor(p.value), ...p }))
+  const points = data.map((p, i) => ({
+    x: xMode === 'sequence' ? xForIndex(i) : xForDate(toTs(p.date)),
+    y: yFor(p.value),
+    ...p,
+  }))
   const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
   const yTicks = [minV, (minV + maxV) / 2, maxV]
   const last = points[points.length - 1]

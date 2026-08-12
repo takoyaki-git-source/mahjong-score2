@@ -3,19 +3,22 @@ import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { resolvePeriod, type PeriodParams } from '@/lib/period'
 import { dateOnly } from '@/lib/format'
-import type { PlayerStats, MatchupStats, PlayerYakumanStats, PlayerRatingHistoryPoint } from '@/lib/types'
+import type { PlayerStats, MatchupStats, PlayerRatingHistoryPoint } from '@/lib/types'
 import SiteHeader from '@/components/SiteHeader'
 import PeriodSelector from '@/components/PeriodSelector'
+import LastNSelector from '@/components/LastNSelector'
 import TrendChart from '@/components/TrendChart'
 
 type YakumanDetail = {
   event_id: number
+  game_id: string
   yakuman_type: string
   game: { played_at: string } | null
   target: { player_id: number; name: string } | null
 }
 
 type ResultRow = {
+  game_id: string
   final_score: number
   rank: number
   game: { played_at: string } | null
@@ -82,17 +85,25 @@ function streakCaption(s: { length: number; startDate: string; endDate: string }
   return `${range}(${s.length}半荘)`
 }
 
+type PlayerSearchParams = PeriodParams & { last_n?: string }
+
 export default async function PlayerPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<PeriodParams>
+  searchParams: Promise<PlayerSearchParams>
 }) {
   const { id } = await params
   const playerId = Number(id)
   const sp = await searchParams
-  const { start, end, label } = resolvePeriod(sp)
+  const lastNRaw = sp.last_n ? Number(sp.last_n) : null
+  const lastN = lastNRaw != null && Number.isFinite(lastNRaw) && lastNRaw > 0 ? Math.floor(lastNRaw) : null
+  // このページのデフォルト期間は成績一覧と違い「全期間」(個人の通算成績を見る用途のため)。
+  const period = lastN ? null : resolvePeriod(sp, 'all')
+  const start = period?.start ?? null
+  const end = period?.end ?? null
+  const label = lastN ? `直近${lastN}半荘` : period!.label
 
   const supabase = await createClient()
 
@@ -107,23 +118,30 @@ export default async function PlayerPage({
   const [
     { data: statsData },
     { data: matchupsData },
-    { data: yakumanData },
     { data: yakumanDetailData },
     { data: yearRows },
     { data: resultRowsData },
     { data: ratingHistoryData },
   ] = await Promise.all([
-    supabase.rpc('player_stats_for_period', { p_start: start, p_end: end }).eq('player_id', playerId),
-    supabase
-      .rpc('matchup_stats_for_period', { p_start: start, p_end: end })
-      .eq('player_a', playerId)
-      .order('games', { ascending: false }),
-    supabase.rpc('player_yakuman_stats_for_period', { p_start: start, p_end: end }).eq('player_id', playerId),
+    lastN
+      ? supabase.rpc('player_stats_for_last_n', { p_n: lastN }).eq('player_id', playerId)
+      : supabase.rpc('player_stats_for_period', { p_start: start, p_end: end }).eq('player_id', playerId),
+    lastN
+      ? supabase
+          .rpc('matchup_stats_for_last_n', { p_player_id: playerId, p_n: lastN })
+          .order('games', { ascending: false })
+      : supabase
+          .rpc('matchup_stats_for_period', { p_start: start, p_end: end })
+          .eq('player_a', playerId)
+          .order('games', { ascending: false }),
+    // 役満・半荘ごとの明細は期間・直近N半荘のどちらでも使えるよう常に全件取得し、
+    // 下でgame_id基準の「対象半荘の集合」によってJS側で絞り込む。
     supabase
       .from('yakuman_events')
       .select(
         `
           event_id,
+          game_id,
           yakuman_type,
           game:games!yakuman_events_game_id_fkey(played_at),
           target:players!yakuman_events_target_player_id_fkey(player_id, name)
@@ -131,17 +149,17 @@ export default async function PlayerPage({
       )
       .eq('player_id', playerId),
     supabase.rpc('available_years'),
-    supabase.from('results').select('final_score, rank, game:games(played_at)').eq('player_id', playerId),
-    // レーティングは常に全期間・全対局を通した逐次計算値のため、この画面の期間指定(start/end)は適用しない。
-    supabase.rpc('player_rating_history').eq('player_id', playerId).order('game_id', { ascending: true }),
+    supabase.from('results').select('game_id, final_score, rank, game:games(played_at)').eq('player_id', playerId),
+    // レーティングは常に全期間・全対局を通した逐次計算値のため、この画面の期間指定/直近N半荘は適用しない。
+    // p_player_idはSQL関数側で絞り込む(PostgREST側の.eq()フィルタだと一度全プレイヤー分を
+    // 計算・シリアライズしてから絞り込む形になり、ペイロードが不必要に肥大化して遅かったため)。
+    supabase.rpc('player_rating_history', { p_player_id: playerId }).order('game_id', { ascending: true }),
   ])
 
   const statsRows = (statsData ?? []) as PlayerStats[]
   const matchups = (matchupsData ?? []) as MatchupStats[]
-  const yakumanRows = (yakumanData ?? []) as PlayerYakumanStats[]
   const years = (yearRows ?? []).map((r: { year: number }) => r.year)
   const stats = statsRows[0]
-  const yakuman = yakumanRows[0]
 
   const ratingHistory = (ratingHistoryData ?? []) as PlayerRatingHistoryPoint[]
   const ratingSeries = ratingHistory.map((r) => ({
@@ -150,25 +168,37 @@ export default async function PlayerPage({
   }))
   const currentRating = ratingHistory.length > 0 ? ratingHistory[ratingHistory.length - 1].rating_after : null
 
-  const yakumanDetails = ((yakumanDetailData ?? []) as unknown as YakumanDetail[])
-    .filter((y) => {
-      const played = y.game?.played_at
-      if (!played) return false
-      if (start && played < start) return false
-      if (end && played > end) return false
-      return true
-    })
-    .sort((a, b) => (b.game?.played_at ?? '').localeCompare(a.game?.played_at ?? ''))
+  // 過去最高Rating(初期値1500を起点に、実際に更新した対局があればその時点を記録)
+  let peakRating = 1500
+  let peakRatingDate: string | null = null
+  for (const r of ratingHistory) {
+    if (r.rating_after > peakRating) {
+      peakRating = r.rating_after
+      peakRatingDate = r.played_at
+    }
+  }
 
-  const resultRows = ((resultRowsData ?? []) as unknown as ResultRow[])
-    .filter((r) => {
-      const played = r.game?.played_at
-      if (!played) return false
-      if (start && played < start) return false
-      if (end && played > end) return false
-      return true
-    })
-    .sort((a, b) => (a.game?.played_at ?? '').localeCompare(b.game?.played_at ?? ''))
+  // 対象半荘の絞り込み: 期間指定は日付範囲、直近N半荘はgame_id基準の末尾N件。
+  // どちらも「game_idの昇順」を対局の時系列として扱う(game_idはYYYYMMDD_連番形式のため)。
+  const allResultRows = ((resultRowsData ?? []) as unknown as ResultRow[])
+    .slice()
+    .sort((a, b) => a.game_id.localeCompare(b.game_id))
+  const resultRows = lastN
+    ? allResultRows.slice(-lastN)
+    : allResultRows.filter((r) => {
+        const played = r.game?.played_at
+        if (!played) return false
+        if (start && played < start) return false
+        if (end && played > end) return false
+        return true
+      })
+  const windowGameIds = new Set(resultRows.map((r) => r.game_id))
+
+  const yakumanDetails = ((yakumanDetailData ?? []) as unknown as YakumanDetail[])
+    .filter((y) => windowGameIds.has(y.game_id))
+    .sort((a, b) => (b.game?.played_at ?? '').localeCompare(a.game?.played_at ?? ''))
+  const yakumanCount = yakumanDetails.length
+  const yakumanRate = stats && stats.games > 0 ? yakumanCount / stats.games : null
 
   let cumulative = 0
   const cumulativeSeries = resultRows.map((r) => {
@@ -233,10 +263,16 @@ export default async function PlayerPage({
         <h1 className="mb-1 font-display text-2xl font-bold">{player.name}</h1>
         <p className="mb-6 text-sm text-foreground-soft">
           {label}
-          {start && end && ` (${start} 〜 ${end})`}
+          {!lastN && start && end && ` (${start} 〜 ${end})`}
         </p>
 
-        <PeriodSelector basePath={`/players/${playerId}`} current={sp} years={years} />
+        <PeriodSelector
+          basePath={`/players/${playerId}`}
+          current={lastN ? { period: '__last_n__' } : sp}
+          years={years}
+          defaultPeriod="all"
+        />
+        <LastNSelector basePath={`/players/${playerId}`} activeN={lastN} />
 
         {currentRating != null && (
           <section className="mb-10">
@@ -245,18 +281,33 @@ export default async function PlayerPage({
               天鳳風レーティング(段位戦)。期間指定の影響を受けず、全対局を通した現在値です。
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
-              <StatCard
-                label="現在のRating"
-                value={Math.round(currentRating)}
-                caption={`全${ratingHistory.length}戦`}
+              <div className="grid grid-cols-2 gap-3">
+                <StatCard
+                  label="現在のRating"
+                  value={Math.round(currentRating)}
+                  caption={`全${ratingHistory.length}戦`}
+                />
+                <StatCard
+                  label="過去最高Rating"
+                  value={Math.round(peakRating)}
+                  caption={peakRatingDate ? `(${peakRatingDate.slice(0, 10)})` : undefined}
+                />
+              </div>
+              <TrendChart
+                title="レーティング推移(半荘単位)"
+                data={ratingSeries}
+                color="var(--gold)"
+                format="rating"
+                xMode="sequence"
               />
-              <TrendChart title="レーティング推移(全期間)" data={ratingSeries} color="var(--gold)" format="rating" />
             </div>
           </section>
         )}
 
         {!stats ? (
-          <p className="text-sm text-foreground-soft">この期間の対局データはありません。</p>
+          <p className="text-sm text-foreground-soft">
+            {lastN ? '対局データがありません。' : 'この期間の対局データはありません。'}
+          </p>
         ) : (
           <div className="space-y-10">
             <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -342,11 +393,11 @@ export default async function PlayerPage({
               </div>
             </section>
 
-            {yakuman && yakuman.yakuman_count > 0 && (
+            {yakumanCount > 0 && (
               <section>
                 <h2 className="mb-3 font-display text-lg font-bold">役満</h2>
                 <p className="mb-3 text-sm text-foreground-soft">
-                  {yakuman.yakuman_count}回 (発生率 {pct(yakuman.yakuman_rate)})
+                  {yakumanCount}回 (発生率 {pct(yakumanRate)})
                 </p>
                 <ul className="space-y-2">
                   {yakumanDetails.map((y) => (

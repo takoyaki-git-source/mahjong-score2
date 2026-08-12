@@ -2,12 +2,12 @@ export type PeriodParams = { period?: string; start?: string; end?: string }
 
 export type ResolvedPeriod = { start: string | null; end: string | null; label: string }
 
-export function resolvePeriod(sp: PeriodParams): ResolvedPeriod {
+export function resolvePeriod(sp: PeriodParams, defaultPeriod: string = 'ytd'): ResolvedPeriod {
   if (sp.start || sp.end) {
     return { start: sp.start ?? null, end: sp.end ?? null, label: 'カスタム期間' }
   }
 
-  const period = sp.period ?? 'ytd'
+  const period = sp.period ?? defaultPeriod
   const end = new Date()
   const start = new Date(end)
 

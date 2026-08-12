@@ -67,11 +67,3 @@ export type MatchupStats = {
   top_rate_a: number
   last_rate_a: number
 }
-
-export type PlayerYakumanStats = {
-  player_id: number
-  name: string
-  yakuman_count: number
-  games: number
-  yakuman_rate: number
-}

@@ -11,13 +11,15 @@ export default function PeriodSelector({
   basePath,
   current,
   years = [],
+  defaultPeriod = 'ytd',
 }: {
   basePath: string
   current: PeriodParams
   years?: number[]
+  defaultPeriod?: string
 }) {
   const isCustom = Boolean(current.start || current.end)
-  const activePeriod = isCustom ? null : (current.period ?? 'ytd')
+  const activePeriod = isCustom ? null : (current.period ?? defaultPeriod)
 
   const pillClass = (active: boolean) =>
     `rounded-full px-3.5 py-1.5 text-sm transition-colors ${
