@@ -44,8 +44,8 @@ function StatCard({
   caption,
 }: {
   label: string
-  value: string | number
-  caption?: string
+  value: React.ReactNode
+  caption?: React.ReactNode
 }) {
   return (
     <div className="rounded-xl border border-line bg-surface p-3.5">
@@ -53,6 +53,18 @@ function StatCard({
       <p className="mt-1 font-mono text-lg font-semibold tabular-nums">{value}</p>
       {caption && <p className="mt-0.5 text-xs text-foreground-soft">{caption}</p>}
     </div>
+  )
+}
+
+// 日付が特定できる箇所から、その日の日別成績ページへ飛べるようにするリンク。
+function DailyLink({ date }: { date: string }) {
+  return (
+    <Link
+      href={`/daily?date=${date}`}
+      className="underline decoration-line underline-offset-2 hover:text-accent hover:decoration-accent"
+    >
+      {date}
+    </Link>
   )
 }
 
@@ -81,8 +93,17 @@ function findMaxStreak(rows: { date: string; match: boolean }[]) {
 
 function streakCaption(s: { length: number; startDate: string; endDate: string } | null) {
   if (!s) return undefined
-  const range = s.startDate === s.endDate ? s.startDate : `${s.startDate}〜${s.endDate}`
-  return `${range}(${s.length}半荘)`
+  return (
+    <>
+      <DailyLink date={s.startDate} />
+      {s.startDate !== s.endDate && (
+        <>
+          〜<DailyLink date={s.endDate} />
+        </>
+      )}
+      {`(${s.length}半荘)`}
+    </>
+  )
 }
 
 type PlayerSearchParams = PeriodParams & { last_n?: string }
@@ -290,7 +311,7 @@ export default async function PlayerPage({
                 <StatCard
                   label="過去最高Rating"
                   value={Math.round(peakRating)}
-                  caption={peakRatingDate ? `(${peakRatingDate.slice(0, 10)})` : undefined}
+                  caption={peakRatingDate ? <>(<DailyLink date={peakRatingDate.slice(0, 10)} />)</> : undefined}
                 />
               </div>
               <TrendChart
@@ -327,14 +348,18 @@ export default async function PlayerPage({
               <StatCard
                 label="最高pt"
                 value={pt(stats.max_score)}
-                caption={maxScoreGame ? `(${maxScoreGame.game!.played_at.slice(0, 10)})` : undefined}
+                caption={
+                  maxScoreGame ? <>(<DailyLink date={maxScoreGame.game!.played_at.slice(0, 10)} />)</> : undefined
+                }
               />
               <StatCard
                 label="最低pt"
                 value={pt(stats.min_score)}
-                caption={minScoreGame ? `(${minScoreGame.game!.played_at.slice(0, 10)})` : undefined}
+                caption={
+                  minScoreGame ? <>(<DailyLink date={minScoreGame.game!.played_at.slice(0, 10)} />)</> : undefined
+                }
               />
-              <StatCard label="最終対局日" value={stats.last_played} />
+              <StatCard label="最終対局日" value={<DailyLink date={stats.last_played} />} />
             </section>
 
             <section>
@@ -382,12 +407,12 @@ export default async function PlayerPage({
                 <StatCard
                   label="日別最高pt"
                   value={pt(stats.best_day)}
-                  caption={bestDayEntry ? `(${bestDayEntry[0]})` : undefined}
+                  caption={bestDayEntry ? <>(<DailyLink date={bestDayEntry[0]} />)</> : undefined}
                 />
                 <StatCard
                   label="日別最低pt"
                   value={pt(stats.worst_day)}
-                  caption={worstDayEntry ? `(${worstDayEntry[0]})` : undefined}
+                  caption={worstDayEntry ? <>(<DailyLink date={worstDayEntry[0]} />)</> : undefined}
                 />
                 <StatCard label="プラス日数率" value={pctCount(stats.plus_rate, stats.plus_days, '日')} />
               </div>
@@ -406,7 +431,9 @@ export default async function PlayerPage({
                       className="flex items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2 text-sm"
                     >
                       <span className="font-medium">{y.yakuman_type}</span>
-                      <span className="text-foreground-soft">{dateOnly(y.game?.played_at)}</span>
+                      <span className="text-foreground-soft">
+                        {y.game?.played_at ? <DailyLink date={dateOnly(y.game.played_at)} /> : '-'}
+                      </span>
                       <span className="ml-auto text-foreground-soft">
                         {y.target ? (
                           <>
