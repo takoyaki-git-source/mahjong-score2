@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-export default function SiteHeader({ active }: { active?: 'leaderboard' | 'daily' | 'yakuman' }) {
+export default function SiteHeader({ active }: { active?: 'leaderboard' | 'daily' | 'yakuman' | 'rules' }) {
   const linkClass = (isActive: boolean) =>
     isActive ? 'text-accent' : 'text-foreground-soft hover:text-foreground'
 
@@ -19,6 +19,9 @@ export default function SiteHeader({ active }: { active?: 'leaderboard' | 'daily
           </Link>
           <Link href="/yakuman" className={linkClass(active === 'yakuman')}>
             役満記録
+          </Link>
+          <Link href="/rules" className={linkClass(active === 'rules')}>
+            アガリ役
           </Link>
           <Link href="/admin" className="text-foreground-soft hover:text-foreground">
             入力
