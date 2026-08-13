@@ -49,7 +49,18 @@ export default async function YakumanPage() {
               >
                 <div className="min-w-0">
                   <p className="font-display text-lg font-bold leading-snug">{r.yakuman_type}</p>
-                  <p className="mt-1 text-sm text-foreground-soft">{dateOnly(r.game?.played_at)}</p>
+                  <p className="mt-1 text-sm text-foreground-soft">
+                    {r.game?.played_at ? (
+                      <Link
+                        href={`/daily?date=${dateOnly(r.game.played_at)}`}
+                        className="underline decoration-line underline-offset-2 hover:text-accent hover:decoration-accent"
+                      >
+                        {dateOnly(r.game.played_at)}
+                      </Link>
+                    ) : (
+                      dateOnly(r.game?.played_at)
+                    )}
+                  </p>
                   <p className="mt-2 text-sm">
                     {r.winner ? (
                       <Link
