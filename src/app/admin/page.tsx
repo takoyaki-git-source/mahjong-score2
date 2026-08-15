@@ -13,7 +13,7 @@ export default async function AdminPage() {
     { data: totalGames, error: totalError },
   ] = await Promise.all([
     supabase.from('players').select('player_id, name'),
-    supabase.from('mahjong_rules').select('rule_id, rule_name').order('rule_id'),
+    supabase.from('mahjong_rules').select('rule_id, rule_name, base_score').order('rule_id'),
     supabase.from('player_recent_year_games').select('player_id, recent_games'),
     supabase.from('player_base_stats').select('player_id, games'),
   ])

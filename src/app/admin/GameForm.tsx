@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
 type Player = { player_id: number; name: string }
-type Rule = { rule_id: number; rule_name: string }
+type Rule = { rule_id: number; rule_name: string; base_score: number }
 type Mode = 'raw' | 'points'
 type PreviewRow = { player_id: number; rank: number; final_score: number }
 type YakumanEntry = { playerId: string; type: string; targetId: string }
@@ -67,8 +67,24 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
     rows.every((r) => r.playerId && r.value !== '') && new Set(selectedPlayerIds).size === SEAT_COUNT
   const seatsValid = new Set(selectedSeats).size === SEAT_COUNT
 
+  const currentRule = rules.find((r) => String(r.rule_id) === ruleId)
+  const emptyValueIndexes = rows.reduce<number[]>((acc, r, i) => {
+    if (r.value === '') acc.push(i)
+    return acc
+  }, [])
+  const canAutoFillLast =
+    emptyValueIndexes.length === 1 && (mode === 'points' || currentRule !== undefined)
+
   function updateRow(i: number, patch: Partial<{ playerId: string; value: string; seat: string }>) {
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
+  }
+
+  function autoFillLastValue() {
+    if (!canAutoFillLast) return
+    const idx = emptyValueIndexes[0]
+    const sumOthers = rows.reduce((sum, r, i) => (i === idx ? sum : sum + (Number(r.value) || 0)), 0)
+    const target = mode === 'raw' ? (currentRule?.base_score ?? 0) * SEAT_COUNT : 0
+    updateRow(idx, { value: String(target - sumOthers) })
   }
 
   function switchMode(next: Mode) {
@@ -346,15 +362,26 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
         {!seatsValid && <p className="text-sm text-accent">東南西北家が重複しています</p>}
       </div>
 
-      <p className="text-sm text-foreground-soft">
-        合計: {valueSum.toLocaleString()}{mode === 'raw' ? '点' : 'pt'}
-        {mode === 'raw' && valueSum !== 0 && valueSum !== 100000 && (
-          <span className="text-gold"> (通常は100,000点になるはずです)</span>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-foreground-soft">
+          合計: {valueSum.toLocaleString()}{mode === 'raw' ? '点' : 'pt'}
+          {mode === 'raw' && valueSum !== 0 && valueSum !== 100000 && (
+            <span className="text-gold"> (通常は100,000点になるはずです)</span>
+          )}
+          {mode === 'points' && valueSum !== 0 && (
+            <span className="text-gold"> (通常は合計0になるはずです)</span>
+          )}
+        </p>
+        {canAutoFillLast && (
+          <button
+            type="button"
+            onClick={autoFillLastValue}
+            className="shrink-0 rounded-md border border-line px-3 py-1.5 text-xs hover:border-accent hover:text-accent"
+          >
+            残り1人を自動計算
+          </button>
         )}
-        {mode === 'points' && valueSum !== 0 && (
-          <span className="text-gold"> (通常は合計0になるはずです)</span>
-        )}
-      </p>
+      </div>
 
       {mode === 'raw' && rowsComplete && (
         <div className="rounded-lg border border-line bg-surface p-3 text-sm">
