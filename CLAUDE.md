@@ -103,8 +103,10 @@ frontend-designスキルで検討したビジュアルデザインを適用済�
 - **`generate_game_id(p_date date) → text`**: その日の`games`の件数を見て`YYYYMMDD_連番`形式のgame_idを発行
 - **`compute_game_results(p_rule_id, p_player1..4, p_score1..4, p_seat1..4, p_tobi_target, p_tobi_by) → table(player_id, seat_order, raw_score, rank, final_score)`**: 素点からウマ・オカ・トビ込みの最終ポイントを計算する純粋関数(INSERTしない)。`submit_game`と`/admin`のプレビュー表示の両方から呼ばれる、計算ロジックの単一の実装元。
   - 着順(`rank`)は素点降順・同点は`seat_order`昇順
-  - `final_score = (raw_score - base_score) / 1000 + ウマ[順位] - オカ/4 + (1位のみ+オカ全額) + トビ賞罰`
+  - `final_score = round_go_roku((raw_score - base_score) / 1000 + ウマ[順位] - オカ/4 + (1位のみ+オカ全額) + トビ賞罰)`
   - ⚠️ **オカの計算に一度バグがあった**: 当初は1位に+オカを足すだけで誰からも引いていなかったため、半荘ごとに合計が+オカ分だけ増えてゼロサムになっていなかった(過去データは合計0のはずなのに矛盾)。「全員から一律オカ/4を引き、1位にオカ全額を足す」に修正しゼロサムになることを確認済み
+  - ⚠️ **トビ罰(-10)が一度全く適用されないバグがあった**(2026-08-15判明・修正): `p_tobi_target`(飛んだ側)と一致するかで判定していたが、`GameForm`は常に`p_tobi_target: null`を渡す設計(飛んだ側は素点から自動判定する方針、下記参照)だったため条件が常にfalseになり、素点がマイナスでも罰則が入らなかった。`raw_score < 0`で直接判定するように修正(`20260815010000_fix_tobi_penalty_and_go_roku_rounding.sql`)。バグの影響を受けていた2026-08-15分12半荘(素点入力モード)の`results.rank`/`final_score`は修正後の関数で再計算しUPDATE済み。過去857半荘はポイントのみ形式(素点自体が無い)でこの関数を経由しないため影響なし
+  - **端数処理は五捨六入**(2026-08-15、四捨五入から変更): `round_go_roku(numeric) → integer`ヘルパーで実装。符号ごとの絶対値に対し端数.5以下切り捨て・.6以上切り上げ(四捨五入は.5以上切り上げなので、ちょうど.5の扱いのみが違う)。この丸めは各プレイヤーの`final_score`を独立に丸めるため、半荘ごとの合計が稀に±数ptだけゼロサムからズレることがある(丸め前の理論値は必ずゼロサムだが、丸め後は保証されない。旧実装でも同様の性質はあった)
 - **`submit_game(p_played_at, p_rule_id, p_player1..4, p_score1..4, p_seat1..4, p_tobi_target, p_tobi_by, p_yakuman) → text`**: 半荘結果をまとめて登録するRPC。`generate_game_id`でgame_id発行→`games`にINSERT→`compute_game_results`の結果を`results`にINSERT→`p_yakuman`があれば`yakuman_events`にもINSERT。
   - **設計意図**: 新アプリでは半荘終了時の素点(そのままの点数)を入力するだけで、ウマ・オカ・トビの計算は自動で行う。旧スプレッドシートはウマオカトビ計算後の最終ポイントしか記録していなかった(`raw_score`が過去データ全件NULLなのはこのため)ので、これは運用上の改善にあたる
   - `p_rule_id`はハードコードではなくパラメータ化済み(複数ルールを切り替えて使える)
