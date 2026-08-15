@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { resolvePeriod, type PeriodParams } from '@/lib/period'
+import { resolvePeriod, yearPeriodEnd, type PeriodParams } from '@/lib/period'
 import type { PlayerRating, PlayerStats } from '@/lib/types'
 import SiteHeader from '@/components/SiteHeader'
 import PeriodSelector from '@/components/PeriodSelector'
@@ -13,6 +13,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<Hom
   const lastNRaw = sp.last_n ? Number(sp.last_n) : null
   const lastN = lastNRaw != null && Number.isFinite(lastNRaw) && lastNRaw > 0 ? Math.floor(lastNRaw) : null
   const period = lastN ? null : resolvePeriod(sp)
+  // 年単位ボタン(period=2020等)で絞り込んだ場合のみ、その年末時点のRatingを表示する。
+  // それ以外の期間指定は「現在値からしか計算しようがない」ためRatingには適用しない。
+  const ratingAsOf = period ? yearPeriodEnd(period) : null
 
   const supabase = await createClient()
   const [{ data, error }, { data: yearRows }, { data: ratingRows }] = await Promise.all([
@@ -20,7 +23,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Hom
       ? supabase.rpc('player_stats_for_last_n', { p_n: lastN })
       : supabase.rpc('player_stats_for_period', { p_start: period!.start, p_end: period!.end }),
     supabase.rpc('available_years'),
-    supabase.rpc('player_current_ratings'),
+    supabase.rpc('player_current_ratings', { p_as_of: ratingAsOf }),
   ])
   const ratingByPlayer = new Map((((ratingRows ?? []) as PlayerRating[])).map((r) => [r.player_id, r.rating]))
   const stats = ((data ?? []) as PlayerStats[]).map((s) => ({
@@ -53,7 +56,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<Hom
           </p>
         )}
 
-        {!error && stats.length > 0 && <Leaderboard stats={stats} requireMinPlayDays={!lastN} />}
+        {!error && stats.length > 0 && (
+          <Leaderboard stats={stats} requireMinPlayDays={!lastN} ratingAsOfYear={ratingAsOf?.slice(0, 4) ?? null} />
+        )}
       </main>
     </>
   )

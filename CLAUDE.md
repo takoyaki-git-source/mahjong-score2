@@ -148,6 +148,12 @@ frontend-designスキルで検討したビジュアルデザインを適用済�
 ⚠️ **既知の課題**:
 - 上記3関数で「集計期間指定」の主要な要件はカバーしたが、連続記録の分布(`_distribution`系)や`player_stats_all`相当はまだ期間指定版を作っていない(必要になったら追加)
 
+### Rating(天鳳風レーティング、段位戦)
+
+- **`player_rating_history(p_player_id DEFAULT NULL, p_as_of date DEFAULT NULL)`**: 全857半荘をgame_id昇順(=時系列)で1回だけ通しでループし、各対局ごとのRating変動を計算するPL/pgSQL関数(計算式はマイグレーション`20260812010000_add_player_rating.sql`のコメント参照)。逐次計算(卓内の相互作用に依存)のため期間指定はできず、常に対局履歴の先頭から通しで計算する。`p_player_id`指定時は出力のみそのプレイヤーに絞る(状態計算自体は全プレイヤー分行う)。`p_as_of`指定時は`played_at <= p_as_of`の対局のみで計算する(=その日時点のRatingが求まる)
+- **`player_current_ratings(p_as_of date DEFAULT NULL)`**: 各プレイヤーの最新Ratingを1行ずつ返す(`player_rating_history`の各プレイヤーの最終行)。成績一覧で使用
+- **成績一覧・個人詳細ページでのRating表示**: 通常は`p_as_of: null`(現在値)。**年単位ボタン(`period=2020`等)で絞り込んだ場合のみ**`p_as_of`にその年の12/31を渡し、その年末時点のRatingを表示する(`src/lib/period.ts`の`yearPeriodEnd()`で判定)。それ以外の期間指定(全期間/直近1年/今年/カスタム/直近N半荘)は「現在値からしか計算しようがない」ため対象外で、常に現在値のまま(画面にもその旨を注記表示)
+
 ✅ **対応済み**:
 - トビには「飛んだ側」と「飛ばした側」があり、判定方法が異なる。
   - **飛んだ側 (`tobi_target_player_id`)**: 点数(素点 or 最終ポイント)から判定可能。過去データも新規データも`player_base_stats`の`final_score <= -50`閾値判定で統一してよい。この方針により`/admin`の入力フォームでは飛んだ側の入力欄は設けていない(常に`p_tobi_target: null`で`submit_game`を呼ぶ。複数人が同時に飛ぶケースにも対応できる)

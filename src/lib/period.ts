@@ -26,6 +26,12 @@ export function resolvePeriod(sp: PeriodParams, defaultPeriod: string = 'ytd'): 
   return { start: null, end: null, label: '全期間' }
 }
 
+// 年単位ボタン(period=2020等)で絞り込んだ場合のみ、その年末の日付を返す。
+// それ以外(全期間/直近1年/今年/カスタム)はRatingの「現在値」表示を変えないためnull。
+export function yearPeriodEnd(period: ResolvedPeriod): string | null {
+  return /^\d{4}年$/.test(period.label) ? period.end : null
+}
+
 function toISODate(d: Date) {
   const tzOffsetMs = d.getTimezoneOffset() * 60_000
   return new Date(d.getTime() - tzOffsetMs).toISOString().slice(0, 10)

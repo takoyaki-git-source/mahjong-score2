@@ -83,9 +83,12 @@ function valueOf(s: PlayerStats, key: ColumnKey): number | string | null {
 export default function Leaderboard({
   stats,
   requireMinPlayDays = true,
+  ratingAsOfYear = null,
 }: {
   stats: PlayerStats[]
   requireMinPlayDays?: boolean
+  /** 年単位フィルタ選択時のみ渡される、その年(YYYY)。Ratingがその年末時点の値であることを示す注記に使う。 */
+  ratingAsOfYear?: string | null
 }) {
   const [sortKey, setSortKey] = useState<ColumnKey>('avg_score')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
@@ -208,6 +211,12 @@ export default function Leaderboard({
         />
         下の表とハイライトにも足切り({cutoffLabel})を適用する
       </label>
+
+      {ratingAsOfYear && (
+        <p className="mb-4 text-xs text-foreground-soft">
+          Ratingは{ratingAsOfYear}年末時点の値です(他の列はこの期間の集計、Rating以外の期間指定では常に現在値)。
+        </p>
+      )}
 
       <div className="overflow-x-auto rounded-xl border border-line bg-surface">
         <table className="w-full min-w-[820px] text-sm">

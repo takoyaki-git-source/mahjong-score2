@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { resolvePeriod, type PeriodParams } from '@/lib/period'
+import { resolvePeriod, yearPeriodEnd, type PeriodParams } from '@/lib/period'
 import { dateOnly } from '@/lib/format'
 import type { PlayerStats, MatchupStats, PlayerRatingHistoryPoint } from '@/lib/types'
 import SiteHeader from '@/components/SiteHeader'
@@ -125,6 +125,9 @@ export default async function PlayerPage({
   const start = period?.start ?? null
   const end = period?.end ?? null
   const label = lastN ? `直近${lastN}半荘` : period!.label
+  // 年単位ボタン(period=2020等)で絞り込んだ場合のみ、その年末時点のRatingを表示する。
+  // それ以外の期間指定は「現在値からしか計算しようがない」ためRatingには適用しない。
+  const ratingAsOf = period ? yearPeriodEnd(period) : null
 
   const supabase = await createClient()
 
@@ -187,7 +190,13 @@ export default async function PlayerPage({
     date: r.played_at.slice(0, 10),
     value: Math.round(r.rating_after * 10) / 10,
   }))
-  const currentRating = ratingHistory.length > 0 ? ratingHistory[ratingHistory.length - 1].rating_after : null
+  // 年単位フィルタ選択時のみ、その年末までの対局に絞った最終Ratingを表示する。
+  // それ以外は従来通り全対局を通した現在値(グラフ・過去最高Rating等は常に全履歴のまま)。
+  const ratingHistoryUpToAsOf = ratingAsOf ? ratingHistory.filter((r) => r.played_at <= ratingAsOf) : ratingHistory
+  const currentRating =
+    ratingHistoryUpToAsOf.length > 0
+      ? ratingHistoryUpToAsOf[ratingHistoryUpToAsOf.length - 1].rating_after
+      : null
 
   // 過去最高Rating(初期値1500を起点に、実際に更新した対局があればその時点を記録)
   let peakRating = 1500
@@ -299,14 +308,17 @@ export default async function PlayerPage({
           <section className="mb-10">
             <h2 className="mb-3 font-display text-lg font-bold">Rating</h2>
             <p className="mb-3 text-xs text-foreground-soft">
-              天鳳風レーティング(段位戦)。期間指定の影響を受けず、全対局を通した現在値です。
+              天鳳風レーティング(段位戦)。
+              {ratingAsOf
+                ? `年単位の期間指定のため、${ratingAsOf.slice(0, 4)}年末時点の値を表示しています(他の期間指定はこの計算ができないため、常に現在値です)。`
+                : '期間指定の影響を受けず、全対局を通した現在値です。'}
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid grid-cols-2 gap-3">
                 <StatCard
-                  label="現在のRating"
+                  label={ratingAsOf ? `${ratingAsOf.slice(0, 4)}年末時点のRating` : '現在のRating'}
                   value={Math.round(currentRating)}
-                  caption={`全${ratingHistory.length}戦`}
+                  caption={`${ratingAsOf ? 'この時点まで' : '全'}${ratingHistoryUpToAsOf.length}戦`}
                 />
                 <StatCard
                   label="過去最高Rating"
