@@ -218,8 +218,12 @@ export default async function PlayerPage({
     : allResultRows.filter((r) => {
         const played = r.game?.played_at
         if (!played) return false
-        if (start && played < start) return false
-        if (end && played > end) return false
+        // played_atはtimestamp型で"2026-08-15T00:00:00"のような時刻付き文字列になるため、
+        // date型のstart/endとそのまま比較すると同日でも「時刻の分だけ大きい」と判定され、
+        // 期間の終了日ちょうどの半荘が誤って除外されてしまう。日付部分だけを切り出して比較する。
+        const playedDate = played.slice(0, 10)
+        if (start && playedDate < start) return false
+        if (end && playedDate > end) return false
         return true
       })
   const windowGameIds = new Set(resultRows.map((r) => r.game_id))
