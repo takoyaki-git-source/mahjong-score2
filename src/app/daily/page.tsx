@@ -129,6 +129,16 @@ export default async function DailyPage({ searchParams }: { searchParams: Promis
   const bestTotal = ranking[0]?.total
   const worstTotal = ranking[ranking.length - 1]?.total
 
+  // その日の各メンバーの着順回数(1位〜4位)
+  const rankCounts = new Map<number, [number, number, number, number]>()
+  for (const g of games) {
+    for (const r of g.results) {
+      const counts = rankCounts.get(r.player_id) ?? [0, 0, 0, 0]
+      counts[r.rank - 1] += 1
+      rankCounts.set(r.player_id, counts)
+    }
+  }
+
   return (
     <>
       <SiteHeader active="daily" />
@@ -320,6 +330,45 @@ export default async function DailyPage({ searchParams }: { searchParams: Promis
                   </tr>
                 </tfoot>
               </table>
+            </div>
+
+            <div className="mt-8">
+              <h2 className="mb-3 font-display text-lg font-bold">着順回数</h2>
+              <div className="overflow-x-auto rounded-xl border border-line bg-surface">
+                <table className="w-full min-w-[420px] text-sm">
+                  <thead>
+                    <tr className="border-b border-line text-left">
+                      <th className="py-2.5 pr-3 pl-4">プレイヤー</th>
+                      <th className="py-2.5 pr-3 text-right">1位</th>
+                      <th className="py-2.5 pr-3 text-right">2位</th>
+                      <th className="py-2.5 pr-3 text-right">3位</th>
+                      <th className="py-2.5 pr-3 text-right">4位</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ranking.map((r) => {
+                      const counts = rankCounts.get(r.player_id) ?? [0, 0, 0, 0]
+                      return (
+                        <tr key={r.player_id} className="border-b border-line/70">
+                          <td className="py-2 pr-3 pl-4">
+                            <Link
+                              href={`/players/${r.player_id}`}
+                              className="underline decoration-line underline-offset-2 hover:text-accent hover:decoration-accent"
+                            >
+                              {r.name}
+                            </Link>
+                          </td>
+                          {counts.map((c, i) => (
+                            <td key={i} className="py-2 pr-3 text-right font-mono tabular-nums">
+                              {c}
+                            </td>
+                          ))}
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </>
         )}
