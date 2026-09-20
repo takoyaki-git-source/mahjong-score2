@@ -1,10 +1,11 @@
 import { createClient } from '@/lib/supabase/server'
 import { resolvePeriod, yearPeriodEnd, type PeriodParams } from '@/lib/period'
-import type { PlayerRating, PlayerStats } from '@/lib/types'
+import type { PlayerRating, PlayerStats, SeatStats } from '@/lib/types'
 import SiteHeader from '@/components/SiteHeader'
 import PeriodSelector from '@/components/PeriodSelector'
 import LastNSelector from '@/components/LastNSelector'
 import Leaderboard from '@/components/Leaderboard'
+import SeatStatsTable from '@/components/SeatStatsTable'
 
 type HomeSearchParams = PeriodParams & { last_n?: string }
 
@@ -18,13 +19,17 @@ export default async function Home({ searchParams }: { searchParams: Promise<Hom
   const ratingAsOf = period ? yearPeriodEnd(period) : null
 
   const supabase = await createClient()
-  const [{ data, error }, { data: yearRows }, { data: ratingRows }] = await Promise.all([
+  const [{ data, error }, { data: yearRows }, { data: ratingRows }, { data: seatStatsData }] = await Promise.all([
     lastN
       ? supabase.rpc('player_stats_for_last_n', { p_n: lastN })
       : supabase.rpc('player_stats_for_period', { p_start: period!.start, p_end: period!.end }),
     supabase.rpc('available_years'),
     supabase.rpc('player_current_ratings', { p_as_of: ratingAsOf }),
+    // 座席別成績(全員合算)はプレイヤーごとの直近N半荘という概念と相性が悪いため
+    // p_start/p_endのみ対応。直近N半荘モードでは全期間(null/null)を渡す。
+    supabase.rpc('seat_stats_for_period', { p_start: period?.start ?? null, p_end: period?.end ?? null }),
   ])
+  const seatStats = (seatStatsData ?? []) as SeatStats[]
   const ratingByPlayer = new Map((((ratingRows ?? []) as PlayerRating[])).map((r) => [r.player_id, r.rating]))
   const stats = ((data ?? []) as PlayerStats[]).map((s) => ({
     ...s,
@@ -59,6 +64,15 @@ export default async function Home({ searchParams }: { searchParams: Promise<Hom
         {!error && stats.length > 0 && (
           <Leaderboard stats={stats} requireMinPlayDays={!lastN} ratingAsOfYear={ratingAsOf?.slice(0, 4) ?? null} />
         )}
+
+        <section className="mt-10">
+          <h2 className="mb-1 font-display text-lg font-bold">座席別成績</h2>
+          <p className="mb-3 text-xs text-foreground-soft">
+            プレイヤーを問わず、開始時の座席(自風)ごとに全員分を合算した成績です。起家(東家)が統計的に有利かどうかなどの分析用。
+            {lastN && '直近N半荘モードでは対応できないため、全期間の集計を表示しています。'}
+          </p>
+          <SeatStatsTable stats={seatStats} />
+        </section>
       </main>
     </>
   )

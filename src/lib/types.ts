@@ -35,6 +35,15 @@ export type PlayerStats = {
   rating?: number | null
 }
 
+export type SeatStats = {
+  seat_order: number
+  games: number
+  avg_score: number
+  avg_rank: number
+  first_rate: number
+  last_rate: number
+}
+
 export type PlayerRating = {
   player_id: number
   name: string
