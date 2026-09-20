@@ -5,7 +5,7 @@ import ThemeToggle from './ThemeToggle'
 export default function SiteHeader({
   active,
 }: {
-  active?: 'leaderboard' | 'daily' | 'yakuman' | 'hands' | 'rules'
+  active?: 'leaderboard' | 'players' | 'daily' | 'yakuman' | 'hands' | 'rules'
 }) {
   const linkClass = (isActive: boolean) =>
     isActive ? 'text-accent' : 'text-foreground-soft hover:text-foreground'
@@ -19,6 +19,9 @@ export default function SiteHeader({
         <MobileNav>
           <Link href="/" className={linkClass(active === 'leaderboard')}>
             成績一覧
+          </Link>
+          <Link href="/players" className={linkClass(active === 'players')}>
+            プレイヤー一覧
           </Link>
           <Link href="/daily" className={linkClass(active === 'daily')}>
             日別成績
