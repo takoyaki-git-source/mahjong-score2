@@ -71,6 +71,9 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
   }, [])
   const canAutoFillLast =
     emptyValueIndexes.length === 1 && (mode === 'points' || currentRule !== undefined)
+  // 素点モードの正しい合計は「ルールの開始点×4人」、ポイントモードは常に0
+  // (ウマ・オカはゼロサムのため)。ハードコードせずルールから動的に算出する。
+  const targetSum = mode === 'raw' ? (currentRule?.base_score ?? 0) * SEAT_COUNT : 0
 
   function updateRow(i: number, patch: Partial<{ playerId: string; value: string }>) {
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
@@ -106,8 +109,7 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
     if (!canAutoFillLast) return
     const idx = emptyValueIndexes[0]
     const sumOthers = rows.reduce((sum, r, i) => (i === idx ? sum : sum + (Number(r.value) || 0)), 0)
-    const target = mode === 'raw' ? (currentRule?.base_score ?? 0) * SEAT_COUNT : 0
-    updateRow(idx, { value: String(target - sumOthers) })
+    updateRow(idx, { value: String(targetSum - sumOthers) })
   }
 
   function switchMode(next: Mode) {
@@ -197,6 +199,18 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
     }
     if (rows.some((r) => r.value === '')) {
       setError(mode === 'raw' ? '4人分の点数を入力してください' : '4人分のポイントを入力してください')
+      return
+    }
+    if (rows.some((r) => !Number.isFinite(Number(r.value)))) {
+      setError(mode === 'raw' ? '点数が不正です' : 'ポイントが不正です')
+      return
+    }
+    if (valueSum !== targetSum) {
+      setError(
+        mode === 'raw'
+          ? `点数の合計が${targetSum.toLocaleString()}点になっていません(現在: ${valueSum.toLocaleString()}点)`
+          : `ポイントの合計が0になっていません(現在: ${valueSum > 0 ? '+' : ''}${valueSum})`
+      )
       return
     }
     // トビ(素点がマイナス)は誰の手で飛ばしたかが点数からは分からないため、
@@ -412,11 +426,11 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-foreground-soft">
           合計: {valueSum.toLocaleString()}{mode === 'raw' ? '点' : 'pt'}
-          {mode === 'raw' && valueSum !== 0 && valueSum !== 100000 && (
-            <span className="text-gold"> (通常は100,000点になるはずです)</span>
-          )}
-          {mode === 'points' && valueSum !== 0 && (
-            <span className="text-gold"> (通常は合計0になるはずです)</span>
+          {valueSum !== targetSum && rows.some((r) => r.value !== '') && (
+            <span className="text-gold">
+              {' '}
+              ({mode === 'raw' ? `${targetSum.toLocaleString()}点` : '合計0'}になっていないと登録できません)
+            </span>
           )}
         </p>
         {canAutoFillLast && (
