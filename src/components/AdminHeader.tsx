@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import LogoutButton from '@/app/admin/LogoutButton'
+import MobileNav from './MobileNav'
 import ThemeToggle from './ThemeToggle'
 
 export default function AdminHeader({ active }: { active: 'input' | 'management' }) {
@@ -12,7 +13,7 @@ export default function AdminHeader({ active }: { active: 'input' | 'management'
         <Link href="/" className="font-display text-lg font-bold tracking-wide">
           麻雀成績
         </Link>
-        <nav className="flex items-center gap-5 text-sm">
+        <MobileNav>
           <Link href="/admin" className={linkClass(active === 'input')}>
             半荘入力
           </Link>
@@ -24,7 +25,7 @@ export default function AdminHeader({ active }: { active: 'input' | 'management'
           </Link>
           <ThemeToggle />
           <LogoutButton />
-        </nav>
+        </MobileNav>
       </div>
     </header>
   )

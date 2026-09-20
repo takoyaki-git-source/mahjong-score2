@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import MobileNav from './MobileNav'
 import ThemeToggle from './ThemeToggle'
 
 export default function SiteHeader({
@@ -15,7 +16,7 @@ export default function SiteHeader({
         <Link href="/" className="font-display text-lg font-bold tracking-wide">
           麻雀成績
         </Link>
-        <nav className="flex items-center gap-5 text-sm">
+        <MobileNav>
           <Link href="/" className={linkClass(active === 'leaderboard')}>
             成績一覧
           </Link>
@@ -35,7 +36,7 @@ export default function SiteHeader({
             入力
           </Link>
           <ThemeToggle />
-        </nav>
+        </MobileNav>
       </div>
     </header>
   )
