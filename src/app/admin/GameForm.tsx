@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -9,6 +10,10 @@ type Rule = { rule_id: number; rule_name: string; base_score: number }
 type Mode = 'raw' | 'points'
 type PreviewRow = { player_id: number; rank: number; final_score: number }
 type YakumanEntry = { playerId: string; type: string; targetId: string }
+type DaySummaryGame = {
+  game_id: string
+  results: { player_id: number; final_score: number; player: { name: string } | null }[]
+}
 
 const SEAT_COUNT = 4
 const SEAT_LABELS = ['東家(起家)', '南家', '西家', '北家']
@@ -37,6 +42,10 @@ function todayLocalISODate() {
   return new Date(now.getTime() - tzOffsetMs).toISOString().slice(0, 10)
 }
 
+function pt(v: number) {
+  return `${v > 0 ? '+' : ''}${v}`
+}
+
 function initialRows() {
   return Array.from({ length: SEAT_COUNT }, () => ({
     playerId: '',
@@ -58,6 +67,8 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
   const [lastGameId, setLastGameId] = useState<string | null>(null)
   const [preview, setPreview] = useState<PreviewRow[] | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
+  const [daySummary, setDaySummary] = useState<DaySummaryGame[] | null>(null)
+  const [daySummaryLoading, setDaySummaryLoading] = useState(false)
 
   const valueSum = rows.reduce((sum, r) => sum + (Number(r.value) || 0), 0)
   const selectedPlayerIds = rows.map((r) => r.playerId).filter(Boolean)
@@ -180,6 +191,25 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
     tobiBy,
   ])
 
+  // 対局日を選んだ画面のまま、その日にすでに登録済みの成績サマリを表示する
+  // (/dailyへ遷移して戻るとプレイヤー選択等の入力状態が失われるため)。
+  async function loadDaySummary(date: string) {
+    setDaySummaryLoading(true)
+    const supabase = createClient()
+    const { data } = await supabase
+      .from('games')
+      .select('game_id, results(player_id, final_score, player:players(name))')
+      .eq('played_at', date)
+      .order('game_id')
+    setDaySummaryLoading(false)
+    setDaySummary((data ?? null) as unknown as DaySummaryGame[] | null)
+  }
+
+  useEffect(() => {
+    loadDaySummary(playedAt)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playedAt])
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(null)
@@ -271,6 +301,7 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
     setTobiBy('')
     setYakumanEntries([])
     setPreview(null)
+    loadDaySummary(playedAt)
     router.refresh()
   }
 
@@ -345,6 +376,26 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
             ))}
           </select>
         </div>
+      </div>
+
+      <div className="rounded-lg border border-line bg-surface p-3 text-sm">
+        <div className="mb-2 flex items-center justify-between">
+          <p className="font-medium">
+            {playedAt}の成績{daySummaryLoading && <span className="text-foreground-soft">(読み込み中…)</span>}
+          </p>
+          <Link
+            href={`/daily?date=${playedAt}`}
+            className="text-xs text-foreground-soft underline decoration-line underline-offset-2 hover:text-accent hover:decoration-accent"
+          >
+            日別成績ページで見る
+          </Link>
+        </div>
+        {!daySummaryLoading && (!daySummary || daySummary.length === 0) && (
+          <p className="text-foreground-soft">この日の登録はまだありません。</p>
+        )}
+        {!daySummaryLoading && daySummary && daySummary.length > 0 && (
+          <DaySummaryTable games={daySummary} />
+        )}
       </div>
 
       <div className="flex items-center justify-between">
@@ -580,5 +631,63 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
         {submitting ? '登録中…' : '登録する'}
       </button>
     </form>
+  )
+}
+
+// 対局日を選んだ画面のまま登録済みの成績を確認できるよう、日別成績ページの
+// テーブルを簡略化して表示する(合計ptの多い順に列を並べ、半荘ごとに行を出す)。
+function DaySummaryTable({ games }: { games: DaySummaryGame[] }) {
+  const totals = new Map<number, { name: string; total: number }>()
+  for (const g of games) {
+    for (const r of g.results) {
+      const cur = totals.get(r.player_id) ?? { name: r.player?.name ?? '?', total: 0 }
+      cur.total += r.final_score
+      totals.set(r.player_id, cur)
+    }
+  }
+  const ranking = [...totals.entries()]
+    .map(([player_id, v]) => ({ player_id, name: v.name, total: v.total }))
+    .sort((a, b) => b.total - a.total)
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[420px] text-sm">
+        <thead>
+          <tr className="border-b border-line text-left text-foreground-soft">
+            <th className="py-1.5 pr-2">#</th>
+            {ranking.map((r) => (
+              <th key={r.player_id} className="py-1.5 pr-2 text-right">
+                {r.name}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {games.map((g, i) => (
+            <tr key={g.game_id} className="border-b border-line/70">
+              <td className="py-1 pr-2 text-foreground-soft">{i + 1}</td>
+              {ranking.map((r) => {
+                const v = g.results.find((res) => res.player_id === r.player_id)?.final_score
+                return (
+                  <td key={r.player_id} className="py-1 pr-2 text-right font-mono tabular-nums">
+                    {v == null ? '-' : pt(v)}
+                  </td>
+                )
+              })}
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t-2 border-line font-semibold">
+            <td className="py-1.5 pr-2">計</td>
+            {ranking.map((r) => (
+              <td key={r.player_id} className="py-1.5 pr-2 text-right font-mono tabular-nums">
+                {pt(r.total)}
+              </td>
+            ))}
+          </tr>
+        </tfoot>
+      </table>
+    </div>
   )
 }
