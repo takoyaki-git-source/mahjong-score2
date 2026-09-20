@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import ThemeToggle from './ThemeToggle'
 
 export default function SiteHeader({
   active,
@@ -33,6 +34,7 @@ export default function SiteHeader({
           <Link href="/admin" className="text-foreground-soft hover:text-foreground">
             入力
           </Link>
+          <ThemeToggle />
         </nav>
       </div>
     </header>

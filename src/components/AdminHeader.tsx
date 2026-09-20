@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import LogoutButton from '@/app/admin/LogoutButton'
+import ThemeToggle from './ThemeToggle'
 
 export default function AdminHeader({ active }: { active: 'input' | 'management' }) {
   const linkClass = (isActive: boolean) =>
@@ -21,6 +22,7 @@ export default function AdminHeader({ active }: { active: 'input' | 'management'
           <Link href="/" className="text-foreground-soft hover:text-foreground">
             成績を見る
           </Link>
+          <ThemeToggle />
           <LogoutButton />
         </nav>
       </div>

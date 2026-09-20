@@ -32,13 +32,21 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="ja" className={`${geistMono.variable} h-full antialiased`}>
+    <html lang="ja" className={`${geistMono.variable} h-full antialiased`} suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;700;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap"
+        />
+        {/* テーマ選択(ThemeToggle)の反映をhydration前に済ませ、
+            デフォルトテーマが一瞬見えるフラッシュを防ぐ。 */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();",
+          }}
         />
       </head>
       <body className="min-h-full flex flex-col font-sans">

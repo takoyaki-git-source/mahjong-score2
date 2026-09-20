@@ -5,6 +5,17 @@
  * bone/ivory tile faces, ink-brush numerals, and the two dragon tiles
  * most associated with value — 中 (chun, red) and 發 (hatsu, green).
  * Brass stands in for the metal fittings on an old tile set.
+ *
+ * Theme selection: <html data-theme="..."> is set by ThemeToggle
+ * (localStorage-backed) and by a blocking inline script in layout.tsx
+ * (to avoid a flash of the wrong theme before hydration). No attribute
+ * means "system" — follow prefers-color-scheme, which is why the dark
+ * media-query block below is scoped to :root:not([data-theme]): once an
+ * explicit theme is chosen it must win regardless of OS setting.
+ * --accent (中/red) and --accent-2 (發/green) keep the same meaning
+ * (worst/best) in every theme on purpose — only the neutral surface
+ * colors (background/surface/foreground/line) change between themes,
+ * so ranking highlights stay legible no matter which theme is active.
  */
 :root {
   --background: #f1e9d8;
@@ -42,7 +53,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     --background: #1a1c17;
     --foreground: #ece4d2;
     --foreground-soft: #a99d84;
@@ -53,28 +64,59 @@
     --bronze: #c07a4c;
     --line: #38392f;
     --surface: #222319;
+    --grid-mix: 55%;
     color-scheme: dark;
   }
+}
+
+:root[data-theme="dark"] {
+  --background: #1a1c17;
+  --foreground: #ece4d2;
+  --foreground-soft: #a99d84;
+  --accent: #d3626d;
+  --accent-2: #6a9a80;
+  --gold: #c8a765;
+  --silver: #a49c8a;
+  --bronze: #c07a4c;
+  --line: #38392f;
+  --surface: #222319;
+  --grid-mix: 55%;
+  color-scheme: dark;
+}
+
+/* 發(hatsu)テーマ: 發の緑を基調にした、生成りの牌をやや苔むした緑に寄せた配色。 */
+:root[data-theme="hatsu"] {
+  --background: #eef1de;
+  --foreground: #1e2318;
+  --foreground-soft: #5f6b56;
+  --line: #d9ddc0;
+  --surface: #f6f8ec;
+  color-scheme: light;
+}
+
+/* 中(chun)テーマ: 中の赤を基調にした、生成りの牌を朱に寄せた暖色配色。 */
+:root[data-theme="chun"] {
+  --background: #f6e8e0;
+  --foreground: #241613;
+  --foreground-soft: #6f5850;
+  --line: #e6cfc4;
+  --surface: #faf0e9;
+  color-scheme: light;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  /* A faint lattice, like tiles set edge to edge on the table. */
+  /* A faint lattice, like tiles set edge to edge on the table.
+     --grid-mix (set only by dark themes) fades the line color; a plain
+     100% mix of a color with transparent equals the color itself, so
+     light-family themes render identically to using var(--line) directly. */
   background-image:
-    linear-gradient(var(--line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    linear-gradient(color-mix(in srgb, var(--line) var(--grid-mix, 100%), transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--line) var(--grid-mix, 100%), transparent) 1px, transparent 1px);
   background-size: 28px 28px;
   background-attachment: fixed;
   opacity: 1;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    background-image:
-      linear-gradient(color-mix(in srgb, var(--line) 55%, transparent) 1px, transparent 1px),
-      linear-gradient(90deg, color-mix(in srgb, var(--line) 55%, transparent) 1px, transparent 1px);
-  }
 }
 
 ::selection {
