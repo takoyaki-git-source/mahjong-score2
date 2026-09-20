@@ -59,7 +59,7 @@ frontend-designスキルで検討したビジュアルデザインを適用済�
 - `src/app/players/[id]/page.tsx`: プレイヤー個人の詳細ページ。
   - 基本集計(率系のカードは`28.6% (245回)`のように件数も併記、最終対局日含む)。最高/最低ptと日別最高/最低ptには**発生日**を、連続記録には**期間(開始日〜終了日)と半荘数**をcaptionとして表示(`results`テーブルを個別取得して`findMaxStreak`等でJS側で算出。`player_stats_for_period`は最大値の数値しか返さないため)
   - 「推移」セクションに`TrendChart`を3つ配置: 累計pt推移、平均pt(直近20半荘の移動平均)、平均着順(同、`higherIsBetter=false`)。累積平均ではなく移動平均を採用(対局数が多い人ほど累積平均は終盤動かなくなり「最近の調子」が見えなくなるため)
-  - 役満(回数・発生率に加え、日付/役満名/放銃者orツモの個別一覧も表示)・対戦相手別成績(`matchup_stats_for_period`)を表示。同じ`PeriodSelector`で期間指定可能
+  - 役満(回数・発生率に加え、日付/役満名/放銃者orツモの個別一覧も表示)・対戦相手別成績(`matchup_stats_for_period`)・**自風別成績**(東家/南家/西家/北家ごとの半荘数・平均pt・平均着順・1位率・ラス率)を表示。同じ`PeriodSelector`で期間指定可能。自風別成績は専用のSQL関数を作らず、既に取得済みの`results`(`resultRows`、期間フィルタ済み)を`seat_order`でJS側集計している(`matchup_stats_for_period`のような期間指定関数を新設するほどのデータ量・優先度ではないため)。⚠️ `seat_order`は`GameForm`からの新規入力分にしか記録されていない(過去857半荘は自風の情報自体が無い)ため、値がまだ少ない前提でテーブル下に注記を表示している
 - `src/components/TrendChart.tsx`: 折れ線グラフ(Client Component、依存ライブラリ無しの自前SVG実装、dataviz skillのマーク仕様に準拠)。crosshair+tooltip、2pxライン、末尾に直接ラベル。⚠️ Server ComponentからClient Componentへは関数をpropsで渡せない(シリアライズ不可)ため、`valueFormat`/`dateFormat`のような関数ではなく`format: 'pt'|'rank'`や`monthly: boolean`のような文字列/真偽値のpropsでフォーマットを制御する設計にしている
 - `src/app/yakuman/page.tsx`: 役満記録一覧(公開ページ)。`yakuman_events`を`games`(日付)・`players`(和了者・放銃者)とPostgRESTの埋め込みクエリ(`!fk制約名`で明示指定、`player_id`/`target_player_id`の2つのFKがあるため)で結合。日付降順で表示(時刻は`src/lib/format.ts`の`dateOnly()`で除去)、放銃者が無ければ「ツモ」
 - `src/components/PeriodSelector.tsx` / `src/lib/period.ts`: 期間指定UI(共通コンポーネント)。プリセットはリンク、カスタム期間は`<input type="date">`を使ったGETフォーム(JS不要)。`globals.css`に`color-scheme: light`/`dark`を設定していないとダークモード時にブラウザ標準のカレンダーアイコンが背景に同化して見えなくなる不具合があったため設定済み

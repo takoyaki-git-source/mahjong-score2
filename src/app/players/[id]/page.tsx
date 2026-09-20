@@ -21,8 +21,11 @@ type ResultRow = {
   game_id: string
   final_score: number
   rank: number
+  seat_order: number | null
   game: { played_at: string } | null
 }
+
+const SEAT_LABELS: Record<number, string> = { 1: '東家', 2: '南家', 3: '西家', 4: '北家' }
 
 function pct(v: number | null) {
   return v == null ? '-' : `${(v * 100).toFixed(1)}%`
@@ -173,7 +176,10 @@ export default async function PlayerPage({
       )
       .eq('player_id', playerId),
     supabase.rpc('available_years'),
-    supabase.from('results').select('game_id, final_score, rank, game:games(played_at)').eq('player_id', playerId),
+    supabase
+      .from('results')
+      .select('game_id, final_score, rank, seat_order, game:games(played_at)')
+      .eq('player_id', playerId),
     // レーティングは常に全期間・全対局を通した逐次計算値のため、この画面の期間指定/直近N半荘は適用しない。
     // p_player_idはSQL関数側で絞り込む(PostgREST側の.eq()フィルタだと一度全プレイヤー分を
     // 計算・シリアライズしてから絞り込む形になり、ペイロードが不必要に肥大化して遅かったため)。
@@ -286,6 +292,20 @@ export default async function PlayerPage({
   const lastStreak = findMaxStreak(streakRows.map((r) => ({ date: r.date, match: r.rank === 4 })))
   const noTopStreak = findMaxStreak(streakRows.map((r) => ({ date: r.date, match: r.rank !== 1 })))
   const noLastStreak = findMaxStreak(streakRows.map((r) => ({ date: r.date, match: r.rank !== 4 })))
+
+  // 自風別成績。seat_orderはGameFormからの新規入力分にしか記録されていない
+  // (過去データは自風の情報自体が無い)ため、値が無い行は自動的に除外される。
+  const seatStats = [1, 2, 3, 4].map((seat) => {
+    const rows = resultRows.filter((r) => r.seat_order === seat)
+    if (rows.length === 0) return { seat, games: 0, avgScore: null, avgRank: null, firstRate: null, lastRate: null }
+    const games = rows.length
+    const avgScore = Math.round((rows.reduce((sum, r) => sum + r.final_score, 0) / games) * 10) / 10
+    const avgRank = Math.round((rows.reduce((sum, r) => sum + r.rank, 0) / games) * 100) / 100
+    const firstRate = rows.filter((r) => r.rank === 1).length / games
+    const lastRate = rows.filter((r) => r.rank === 4).length / games
+    return { seat, games, avgScore, avgRank, firstRate, lastRate }
+  })
+  const seatStatsGamesTotal = seatStats.reduce((sum, s) => sum + s.games, 0)
 
   return (
     <>
@@ -470,6 +490,49 @@ export default async function PlayerPage({
                 </ul>
               </section>
             )}
+
+            <section>
+              <h2 className="mb-3 font-display text-lg font-bold">自風別成績</h2>
+              {seatStatsGamesTotal > 0 ? (
+                <>
+                  <div className="overflow-x-auto rounded-xl border border-line bg-surface">
+                    <table className="w-full min-w-[480px] text-sm">
+                      <thead>
+                        <tr className="border-b border-line text-left text-foreground-soft">
+                          <th className="py-2.5 pr-3 pl-4">自風</th>
+                          <th className="py-2.5 pr-3 text-right">半荘数</th>
+                          <th className="py-2.5 pr-3 text-right">平均pt</th>
+                          <th className="py-2.5 pr-3 text-right">平均着順</th>
+                          <th className="py-2.5 pr-3 text-right">1位率</th>
+                          <th className="py-2.5 pr-4 text-right">ラス率</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {seatStats.map((s) => (
+                          <tr key={s.seat} className="border-b border-line/70 last:border-b-0">
+                            <td className="py-2.5 pr-3 pl-4">{SEAT_LABELS[s.seat]}</td>
+                            <td className="py-2.5 pr-3 text-right font-mono tabular-nums">
+                              {s.games > 0 ? s.games : '-'}
+                            </td>
+                            <td className="py-2.5 pr-3 text-right font-mono tabular-nums">{pt(s.avgScore)}</td>
+                            <td className="py-2.5 pr-3 text-right font-mono tabular-nums">{s.avgRank ?? '-'}</td>
+                            <td className="py-2.5 pr-3 text-right font-mono tabular-nums">{pct(s.firstRate)}</td>
+                            <td className="py-2.5 pr-4 text-right font-mono tabular-nums">{pct(s.lastRate)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="mt-2 text-xs text-foreground-soft">
+                    自風の記録があるのは新しい入力分のみです(過去データには自風の記録がありません)。
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-foreground-soft">
+                  この期間に自風が記録された半荘がありません(自風の記録があるのは新しい入力分のみです)。
+                </p>
+              )}
+            </section>
 
             <section>
               <h2 className="mb-3 font-display text-lg font-bold">対戦相手別成績</h2>
