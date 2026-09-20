@@ -199,6 +199,13 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
       setError(mode === 'raw' ? '4人分の点数を入力してください' : '4人分のポイントを入力してください')
       return
     }
+    // トビ(素点がマイナス)は誰の手で飛ばしたかが点数からは分からないため、
+    // 明示的な選択を必須にする。ポイントモードのマイナスは単に負けを意味し
+    // トビとは限らないため対象外。
+    if (mode === 'raw' && rows.some((r) => Number(r.value) < 0) && !tobiBy) {
+      setError('点数がマイナスの人がいます。トビ加害(誰の手で飛ばしたか)を選択してください')
+      return
+    }
     if (yakumanEntries.some((y) => (y.playerId && !y.type.trim()) || (!y.playerId && y.type.trim()))) {
       setError('役満は和了者と役満名の両方を入力してください')
       return
