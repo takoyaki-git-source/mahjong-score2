@@ -171,6 +171,7 @@ export default async function DailyPage({ searchParams }: { searchParams: Promis
           </div>
           <form method="get" action="/daily" className="flex items-center gap-1.5 text-sm">
             <select
+              key={date}
               name="date"
               defaultValue={date}
               className="rounded-md border border-line bg-surface px-2 py-1.5 text-foreground"
