@@ -38,10 +38,9 @@ function todayLocalISODate() {
 }
 
 function initialRows() {
-  return Array.from({ length: SEAT_COUNT }, (_, i) => ({
+  return Array.from({ length: SEAT_COUNT }, () => ({
     playerId: '',
     value: '',
-    seat: String(i + 1),
   }))
 }
 
@@ -62,10 +61,8 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
 
   const valueSum = rows.reduce((sum, r) => sum + (Number(r.value) || 0), 0)
   const selectedPlayerIds = rows.map((r) => r.playerId).filter(Boolean)
-  const selectedSeats = rows.map((r) => r.seat)
   const rowsComplete =
     rows.every((r) => r.playerId && r.value !== '') && new Set(selectedPlayerIds).size === SEAT_COUNT
-  const seatsValid = new Set(selectedSeats).size === SEAT_COUNT
 
   const currentRule = rules.find((r) => String(r.rule_id) === ruleId)
   const emptyValueIndexes = rows.reduce<number[]>((acc, r, i) => {
@@ -75,8 +72,34 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
   const canAutoFillLast =
     emptyValueIndexes.length === 1 && (mode === 'points' || currentRule !== undefined)
 
-  function updateRow(i: number, patch: Partial<{ playerId: string; value: string; seat: string }>) {
+  function updateRow(i: number, patch: Partial<{ playerId: string; value: string }>) {
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
+  }
+
+  // 席替え: 任意の2席のプレイヤー(と入力済みの点数)をまるごと入れ替える。
+  // 上下ボタンを繰り返し押すことで、4人を好きな順序に並べ替えられる。
+  function swapRows(i: number, j: number) {
+    if (j < 0 || j >= rows.length) return
+    setRows((prev) => {
+      const next = [...prev]
+      ;[next[i], next[j]] = [next[j], next[i]]
+      return next
+    })
+  }
+
+  // ローテーション: 座席(東南西北)は固定のまま、親送りで全員を1つ隣の席へ
+  // ずらす(南家だった人が次の半荘の東家になる、というリアルな親流れ)。
+  // 新しい半荘の入力を始める操作のため、点数・トビ・役満・プレビューもリセットする。
+  function rotateSeats() {
+    setRows((prev) => {
+      const ids = prev.map((r) => r.playerId)
+      const rotated = [...ids.slice(1), ids[0]]
+      return prev.map((r, i) => ({ ...r, playerId: rotated[i], value: '' }))
+    })
+    setTobiBy('')
+    setYakumanEntries([])
+    setPreview(null)
+    setError(null)
   }
 
   function autoFillLastValue() {
@@ -108,7 +131,7 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
   // 素点モードのみ: 入力が揃ったら compute_game_results をデバウンス呼び出しして
   // 登録前にウマ・オカ・トビ計算後のポイントをプレビュー表示する。
   useEffect(() => {
-    if (mode !== 'raw' || !rowsComplete || !seatsValid || !ruleId) {
+    if (mode !== 'raw' || !rowsComplete || !ruleId) {
       setPreview(null)
       return
     }
@@ -120,16 +143,16 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
         p_rule_id: Number(ruleId),
         p_player1: Number(rows[0].playerId),
         p_score1: Number(rows[0].value),
-        p_seat1: Number(rows[0].seat),
+        p_seat1: 1,
         p_player2: Number(rows[1].playerId),
         p_score2: Number(rows[1].value),
-        p_seat2: Number(rows[1].seat),
+        p_seat2: 2,
         p_player3: Number(rows[2].playerId),
         p_score3: Number(rows[2].value),
-        p_seat3: Number(rows[2].seat),
+        p_seat3: 3,
         p_player4: Number(rows[3].playerId),
         p_score4: Number(rows[3].value),
-        p_seat4: Number(rows[3].seat),
+        p_seat4: 4,
         p_tobi_target: null,
         p_tobi_by: tobiBy ? Number(tobiBy) : null,
       })
@@ -143,20 +166,15 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
   }, [
     mode,
     rowsComplete,
-    seatsValid,
     ruleId,
     rows[0].playerId,
     rows[0].value,
-    rows[0].seat,
     rows[1].playerId,
     rows[1].value,
-    rows[1].seat,
     rows[2].playerId,
     rows[2].value,
-    rows[2].seat,
     rows[3].playerId,
     rows[3].value,
-    rows[3].seat,
     tobiBy,
   ])
 
@@ -175,10 +193,6 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
     }
     if (new Set(selectedPlayerIds).size !== SEAT_COUNT) {
       setError('同じプレイヤーが重複しています')
-      return
-    }
-    if (!seatsValid) {
-      setError('東南西北家が重複しています')
       return
     }
     if (rows.some((r) => r.value === '')) {
@@ -207,16 +221,16 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
       p_rule_id: Number(ruleId),
       p_player1: Number(rows[0].playerId),
       [`${valueParamPrefix}1`]: Number(rows[0].value),
-      p_seat1: Number(rows[0].seat),
+      p_seat1: 1,
       p_player2: Number(rows[1].playerId),
       [`${valueParamPrefix}2`]: Number(rows[1].value),
-      p_seat2: Number(rows[1].seat),
+      p_seat2: 2,
       p_player3: Number(rows[2].playerId),
       [`${valueParamPrefix}3`]: Number(rows[2].value),
-      p_seat3: Number(rows[2].seat),
+      p_seat3: 3,
       p_player4: Number(rows[3].playerId),
       [`${valueParamPrefix}4`]: Number(rows[3].value),
-      p_seat4: Number(rows[3].seat),
+      p_seat4: 4,
       p_tobi_target: null,
       p_tobi_by: tobiBy ? Number(tobiBy) : null,
       p_yakuman: yakumanPayload,
@@ -229,8 +243,9 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
     }
 
     setLastGameId(data as string)
-    // 同じ顔ぶれで何半荘も続けて入力することが多いため、プレイヤーと座席はそのまま残し、
-    // 点数・トビ・役満だけリセットする。
+    // 同じ顔ぶれで何半荘も続けて入力することが多いため、プレイヤーはそのまま残し、
+    // 点数・トビ・役満だけリセットする。座席が実際に回った場合は上の「ローテーション」
+    // ボタンや↑↓で入れ替えてから次の半荘を入力する想定。
     setRows((prev) => prev.map((r) => ({ ...r, value: '' })))
     setTobiBy('')
     setYakumanEntries([])
@@ -311,22 +326,48 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
         </div>
       </div>
 
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium">プレイヤー・点数</span>
+        <button
+          type="button"
+          onClick={rotateSeats}
+          className="rounded-md border border-line px-3 py-1.5 text-xs hover:border-accent hover:text-accent"
+        >
+          ローテーション(親送り)
+        </button>
+      </div>
+      <p className="-mt-4 text-xs text-foreground-soft">
+        座席は東南西北固定です。席が実際に回った場合は上のローテーション、席替えした場合は↑↓で並び替えてください。
+      </p>
+
       <div className="space-y-3">
         {rows.map((row, i) => (
           <div key={i} className="flex items-end gap-3">
             <div className="w-32">
               <label className="mb-1 block text-sm font-medium">座席</label>
-              <select
-                value={row.seat}
-                onChange={(e) => updateRow(i, { seat: e.target.value })}
-                className={inputClass}
-              >
-                {SEAT_LABELS.map((label, idx) => (
-                  <option key={label} value={idx + 1}>
-                    {label}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center justify-between rounded-md border border-line bg-surface px-3 py-2 text-sm">
+                <span>{SEAT_LABELS[i]}</span>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => swapRows(i, i - 1)}
+                    disabled={i === 0}
+                    aria-label="上のプレイヤーと入れ替え"
+                    className="text-foreground-soft hover:text-foreground disabled:opacity-30"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => swapRows(i, i + 1)}
+                    disabled={i === rows.length - 1}
+                    aria-label="下のプレイヤーと入れ替え"
+                    className="text-foreground-soft hover:text-foreground disabled:opacity-30"
+                  >
+                    ↓
+                  </button>
+                </div>
+              </div>
             </div>
             <div className="flex-1">
               <label className="mb-1 block text-sm font-medium">プレイヤー</label>
@@ -359,7 +400,6 @@ export default function GameForm({ players, rules }: { players: Player[]; rules:
             </div>
           </div>
         ))}
-        {!seatsValid && <p className="text-sm text-accent">東南西北家が重複しています</p>}
       </div>
 
       <div className="flex items-center justify-between gap-3">
