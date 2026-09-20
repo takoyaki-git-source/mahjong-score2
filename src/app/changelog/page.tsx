@@ -1,15 +1,14 @@
-import { readFileSync } from 'fs'
-import path from 'path'
 import ReactMarkdown from 'react-markdown'
 import SiteHeader from '@/components/SiteHeader'
 import { docsMarkdownComponents } from '@/components/markdownComponents'
+import { readChangelog } from '@/lib/changelog'
 
-export default function GameRulesPage() {
-  const content = readFileSync(path.join(process.cwd(), 'docs/rule.md'), 'utf-8')
+export default function ChangelogPage() {
+  const content = readChangelog()
 
   return (
     <>
-      <SiteHeader active="rules" />
+      <SiteHeader />
       <main className="mx-auto w-full max-w-3xl px-4 py-8">
         <div className="rounded-xl border border-line bg-surface px-5 py-4">
           <ReactMarkdown components={docsMarkdownComponents}>{content}</ReactMarkdown>

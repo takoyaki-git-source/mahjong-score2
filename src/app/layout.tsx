@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist_Mono } from "next/font/google";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
+import Footer from "@/components/Footer";
 import "./globals.css";
 
 const geistMono = Geist_Mono({
@@ -52,6 +53,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col font-sans">
         <ServiceWorkerRegister />
         {children}
+        <Footer />
       </body>
     </html>
   );
